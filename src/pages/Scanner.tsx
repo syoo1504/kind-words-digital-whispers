@@ -3,12 +3,27 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
 
+interface Employee {
+  employee_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  department: string;
+  designation: string;
+  status: string;
+}
+
 interface AttendanceRecord {
   id: string;
   employeeId: string;
+  employeeName: string;
   qrData: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  isLate: boolean;
   timestamp: string;
   status: 'success' | 'error';
+  type: 'check-in' | 'check-out';
 }
 
 const Scanner = () => {
@@ -17,10 +32,58 @@ const Scanner = () => {
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const navigate = useNavigate();
 
+  // Standard work start time (9:00 AM)
+  const WORK_START_TIME = '09:00';
+
+  const getEmployeeData = (): Employee[] => {
+    return JSON.parse(localStorage.getItem('employeeData') || '[]');
+  };
+
+  const findEmployee = (employeeId: string): Employee | null => {
+    const employees = getEmployeeData();
+    return employees.find(emp => emp.employee_id === employeeId) || null;
+  };
+
+  const isLateArrival = (checkInTime: string): boolean => {
+    const checkIn = new Date(`1970-01-01T${checkInTime}`);
+    const workStart = new Date(`1970-01-01T${WORK_START_TIME}:00`);
+    return checkIn > workStart;
+  };
+
+  const getLastAttendanceRecord = (employeeId: string): AttendanceRecord | null => {
+    const records = JSON.parse(localStorage.getItem('attendanceRecords') || '[]');
+    const employeeRecords = records.filter((r: AttendanceRecord) => r.employeeId === employeeId);
+    
+    // Get today's records only
+    const today = new Date().toDateString();
+    const todayRecords = employeeRecords.filter((r: AttendanceRecord) => 
+      new Date(r.timestamp).toDateString() === today
+    );
+    
+    return todayRecords.length > 0 ? todayRecords[0] : null;
+  };
+
   const saveAttendanceRecord = (record: AttendanceRecord) => {
     const existingRecords = JSON.parse(localStorage.getItem('attendanceRecords') || '[]');
-    const updatedRecords = [record, ...existingRecords];
-    localStorage.setItem('attendanceRecords', JSON.stringify(updatedRecords));
+    
+    // Check if updating existing record or creating new one
+    const existingIndex = existingRecords.findIndex((r: AttendanceRecord) => 
+      r.employeeId === record.employeeId && 
+      new Date(r.timestamp).toDateString() === new Date(record.timestamp).toDateString()
+    );
+
+    if (existingIndex !== -1 && record.type === 'check-out') {
+      // Update existing record with check-out time
+      existingRecords[existingIndex].checkOutTime = record.checkOutTime;
+      existingRecords[existingIndex].type = 'check-out';
+    } else {
+      // Add new record
+      const updatedRecords = [record, ...existingRecords];
+      localStorage.setItem('attendanceRecords', JSON.stringify(updatedRecords));
+      return;
+    }
+    
+    localStorage.setItem('attendanceRecords', JSON.stringify(existingRecords));
   };
 
   const onScanSuccess = (qrText: string) => {
@@ -37,7 +100,6 @@ const Scanner = () => {
       const empId = url.searchParams.get('empId');
       if (empId) {
         employeeId = empId;
-        setStatus(`✅ Attendance Marked!\nEmployee ID: ${employeeId}\nQR Data: ${qrText}`);
       } else {
         recordStatus = 'error';
         setStatus(`❌ Invalid QR format.\nQR Data: ${qrText}`);
@@ -47,16 +109,58 @@ const Scanner = () => {
       setStatus(`❌ Invalid QR format.\nQR Data: ${qrText}`);
     }
 
-    // Save to localStorage
-    const attendanceRecord: AttendanceRecord = {
-      id: Date.now().toString(),
-      employeeId: employeeId || 'Unknown',
-      qrData: qrText,
-      timestamp: new Date().toISOString(),
-      status: recordStatus
-    };
+    if (recordStatus === 'success' && employeeId) {
+      const employee = findEmployee(employeeId);
+      const employeeName = employee ? employee.name : 'Unknown Employee';
+      
+      if (!employee) {
+        setStatus(`❌ Employee not found in system.\nEmployee ID: ${employeeId}`);
+        recordStatus = 'error';
+      } else {
+        const lastRecord = getLastAttendanceRecord(employeeId);
+        const currentTime = new Date();
+        const timeString = currentTime.toTimeString().slice(0, 5); // HH:MM format
+        
+        let attendanceType: 'check-in' | 'check-out' = 'check-in';
+        let statusMessage = '';
 
-    saveAttendanceRecord(attendanceRecord);
+        if (!lastRecord || lastRecord.checkOutTime) {
+          // First check-in of the day or checking in after checkout
+          attendanceType = 'check-in';
+          const isLate = isLateArrival(timeString);
+          statusMessage = `✅ Check-in Successful!\nEmployee: ${employeeName}\nTime: ${timeString}${isLate ? ' (LATE)' : ''}`;
+          
+          const attendanceRecord: AttendanceRecord = {
+            id: Date.now().toString(),
+            employeeId: employeeId,
+            employeeName: employeeName,
+            qrData: qrText,
+            checkInTime: timeString,
+            isLate: isLate,
+            timestamp: currentTime.toISOString(),
+            status: recordStatus,
+            type: attendanceType
+          };
+          
+          saveAttendanceRecord(attendanceRecord);
+        } else {
+          // Check-out
+          attendanceType = 'check-out';
+          statusMessage = `✅ Check-out Successful!\nEmployee: ${employeeName}\nTime: ${timeString}`;
+          
+          const attendanceRecord: AttendanceRecord = {
+            ...lastRecord,
+            checkOutTime: timeString,
+            type: attendanceType,
+            timestamp: currentTime.toISOString()
+          };
+          
+          saveAttendanceRecord(attendanceRecord);
+        }
+
+        setStatus(statusMessage);
+      }
+    }
 
     // Stop scanner
     if (scannerRef.current) {
@@ -71,7 +175,6 @@ const Scanner = () => {
   };
 
   const onScanFailure = (error: string) => {
-    // Handle scan errors silently
     console.log('Scan error:', error);
   };
 
