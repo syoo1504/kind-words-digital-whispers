@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -8,6 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line } from 'recharts';
 
 interface Employee {
   employee_id: string;
@@ -47,6 +49,7 @@ const AdminDashboard = () => {
     designation: '',
     status: 'Active'
   });
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM format
   const navigate = useNavigate();
 
   // Standard work start time (9:00 AM)
@@ -185,6 +188,79 @@ const AdminDashboard = () => {
   const errorScans = attendanceRecords.filter(r => r.status === 'error').length;
   const lateArrivals = attendanceRecords.filter(r => r.isLate && r.type === 'check-in').length;
 
+  // Generate chart data for attendance performance
+  const generateChartData = () => {
+    if (!selectedMonth) return [];
+
+    const monthStart = new Date(selectedMonth + '-01');
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    
+    // Get all unique dates in the selected month
+    const datesInMonth: string[] = [];
+    for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+      datesInMonth.push(d.toISOString().split('T')[0]);
+    }
+
+    // Calculate attendance data for each employee
+    return employees.map(employee => {
+      const employeeRecords = attendanceRecords.filter(record => 
+        record.employeeId === employee.employee_id &&
+        record.status === 'success' &&
+        new Date(record.timestamp).toISOString().slice(0, 7) === selectedMonth
+      );
+
+      const checkInDays = employeeRecords.filter(record => record.type === 'check-in').length;
+      const lateDays = employeeRecords.filter(record => record.type === 'check-in' && record.isLate).length;
+      const onTimeDays = checkInDays - lateDays;
+      const attendanceRate = datesInMonth.length > 0 ? Math.round((checkInDays / datesInMonth.length) * 100) : 0;
+
+      return {
+        name: employee.name.split(' ')[0], // Use first name for chart readability
+        fullName: employee.name,
+        attendanceRate,
+        onTimeDays,
+        lateDays,
+        totalDays: checkInDays,
+        workingDays: datesInMonth.length
+      };
+    }).filter(data => data.totalDays > 0); // Only show employees with attendance data
+  };
+
+  const chartData = generateChartData();
+
+  // Chart configuration
+  const chartConfig = {
+    attendanceRate: {
+      label: "Attendance Rate (%)",
+      color: "hsl(var(--chart-1))",
+    },
+    onTimeDays: {
+      label: "On Time Days",
+      color: "hsl(var(--chart-2))",
+    },
+    lateDays: {
+      label: "Late Days",
+      color: "hsl(var(--chart-3))",
+    },
+  };
+
+  // Generate month options for the last 12 months
+  const generateMonthOptions = () => {
+    const options = [];
+    const currentDate = new Date();
+    
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+      const value = date.toISOString().slice(0, 7);
+      const label = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+      options.push({ value, label });
+    }
+    
+    return options;
+  };
+
+  const monthOptions = generateMonthOptions();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-300 to-gray-100">
       <header className="bg-gradient-to-r from-blue-600 to-blue-400 text-white p-4 shadow-lg">
@@ -261,9 +337,10 @@ const AdminDashboard = () => {
         </div>
 
         <Tabs defaultValue="attendance" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="attendance">Attendance Records</TabsTrigger>
             <TabsTrigger value="employees">Employee Management</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
           
           <TabsContent value="attendance">
@@ -508,6 +585,180 @@ const AdminDashboard = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Attendance Analytics</h2>
+              <div className="flex items-center space-x-4">
+                <Label htmlFor="month-select">Select Month:</Label>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Select month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {monthOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {chartData.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <p className="text-lg text-gray-500">No attendance data found for {monthOptions.find(opt => opt.value === selectedMonth)?.label}</p>
+                  <p className="text-sm text-gray-400">Select a different month or ensure attendance records exist</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                {/* Attendance Rate Chart */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Monthly Attendance Rate by Employee</CardTitle>
+                    <CardDescription>
+                      Percentage of working days each employee was present in {monthOptions.find(opt => opt.value === selectedMonth)?.label}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer config={chartConfig} className="h-80">
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="name" 
+                          tick={{ fontSize: 12 }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis 
+                          domain={[0, 100]}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <ChartTooltip 
+                          content={<ChartTooltipContent />}
+                          formatter={(value, name, props) => [
+                            `${value}%`,
+                            'Attendance Rate',
+                            `${props.payload.fullName}: ${props.payload.totalDays}/${props.payload.workingDays} days`
+                          ]}
+                        />
+                        <Bar 
+                          dataKey="attendanceRate" 
+                          fill="var(--color-attendanceRate)"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+
+                {/* On Time vs Late Performance */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Punctuality Performance</CardTitle>
+                    <CardDescription>
+                      Comparison of on-time vs late arrivals for {monthOptions.find(opt => opt.value === selectedMonth)?.label}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer config={chartConfig} className="h-80">
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="name"
+                          tick={{ fontSize: 12 }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <ChartTooltip 
+                          content={<ChartTooltipContent />}
+                          formatter={(value, name, props) => [
+                            `${value} days`,
+                            name === 'onTimeDays' ? 'On Time' : 'Late',
+                            props.payload.fullName
+                          ]}
+                        />
+                        <Bar 
+                          dataKey="onTimeDays" 
+                          fill="var(--color-onTimeDays)"
+                          stackId="punctuality"
+                          radius={[0, 0, 0, 0]}
+                        />
+                        <Bar 
+                          dataKey="lateDays" 
+                          fill="var(--color-lateDays)"
+                          stackId="punctuality"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+
+                {/* Summary Statistics Table */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Detailed Performance Summary</CardTitle>
+                    <CardDescription>
+                      Detailed breakdown of attendance performance for {monthOptions.find(opt => opt.value === selectedMonth)?.label}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Employee Name</TableHead>
+                          <TableHead>Total Days Present</TableHead>
+                          <TableHead>On Time Days</TableHead>
+                          <TableHead>Late Days</TableHead>
+                          <TableHead>Attendance Rate</TableHead>
+                          <TableHead>Punctuality Rate</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {chartData
+                          .sort((a, b) => b.attendanceRate - a.attendanceRate)
+                          .map((employee) => {
+                            const punctualityRate = employee.totalDays > 0 
+                              ? Math.round((employee.onTimeDays / employee.totalDays) * 100) 
+                              : 0;
+                            
+                            return (
+                              <TableRow key={employee.fullName}>
+                                <TableCell className="font-medium">{employee.fullName}</TableCell>
+                                <TableCell>{employee.totalDays}/{employee.workingDays}</TableCell>
+                                <TableCell>
+                                  <span className="text-green-600 font-medium">{employee.onTimeDays}</span>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="text-orange-600 font-medium">{employee.lateDays}</span>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={employee.attendanceRate >= 90 ? 'default' : employee.attendanceRate >= 70 ? 'secondary' : 'destructive'}>
+                                    {employee.attendanceRate}%
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={punctualityRate >= 90 ? 'default' : punctualityRate >= 70 ? 'secondary' : 'destructive'}>
+                                    {punctualityRate}%
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </main>
