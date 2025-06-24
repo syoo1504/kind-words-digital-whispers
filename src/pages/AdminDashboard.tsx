@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { toast } from '@/components/ui/use-toast';
 
 interface Employee {
   employee_id: string;
@@ -50,6 +51,7 @@ const AdminDashboard = () => {
     status: 'Active'
   });
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM format
+  const [backupStatus, setBackupStatus] = useState<'idle' | 'backing-up' | 'restoring'>('idle');
   const navigate = useNavigate();
 
   // Standard work start time (9:00 AM)
@@ -188,6 +190,76 @@ const AdminDashboard = () => {
   const errorScans = attendanceRecords.filter(r => r.status === 'error').length;
   const lateArrivals = attendanceRecords.filter(r => r.isLate && r.type === 'check-in').length;
 
+  // Calculate overtime hours (over 8 hours per day)
+  const calculateOvertimeHours = (checkInTime: string, checkOutTime: string): number => {
+    if (!checkInTime || !checkOutTime) return 0;
+    
+    const checkIn = new Date(`1970-01-01T${checkInTime}`);
+    const checkOut = new Date(`1970-01-01T${checkOutTime}`);
+    
+    let diffMs = checkOut.getTime() - checkIn.getTime();
+    if (diffMs < 0) {
+      // Handle next day checkout
+      diffMs += 24 * 60 * 60 * 1000;
+    }
+    
+    const totalHours = diffMs / (1000 * 60 * 60);
+    return Math.max(0, totalHours - 8); // Overtime after 8 hours
+  };
+
+  // Get department-wise analytics
+  const getDepartmentAnalytics = () => {
+    const departments: { [key: string]: {
+      totalEmployees: number;
+      presentToday: number;
+      lateToday: number;
+      averageAttendance: number;
+      totalOvertimeHours: number;
+    }} = {};
+
+    employees.forEach(emp => {
+      if (!departments[emp.department]) {
+        departments[emp.department] = {
+          totalEmployees: 0,
+          presentToday: 0,
+          lateToday: 0,
+          averageAttendance: 0,
+          totalOvertimeHours: 0
+        };
+      }
+      departments[emp.department].totalEmployees++;
+
+      // Check today's attendance
+      const today = new Date().toDateString();
+      const todayRecords = attendanceRecords.filter(record => 
+        record.employeeId === emp.employee_id && 
+        new Date(record.timestamp).toDateString() === today &&
+        record.status === 'success'
+      );
+
+      if (todayRecords.length > 0) {
+        departments[emp.department].presentToday++;
+        if (todayRecords.some(r => r.isLate && r.type === 'check-in')) {
+          departments[emp.department].lateToday++;
+        }
+
+        // Calculate overtime for today
+        const checkInRecord = todayRecords.find(r => r.type === 'check-in');
+        const checkOutRecord = todayRecords.find(r => r.type === 'check-out');
+        if (checkInRecord?.checkInTime && checkOutRecord?.checkOutTime) {
+          departments[emp.department].totalOvertimeHours += 
+            calculateOvertimeHours(checkInRecord.checkInTime, checkOutRecord.checkOutTime);
+        }
+      }
+    });
+
+    return Object.entries(departments).map(([dept, data]) => ({
+      department: dept,
+      ...data,
+      attendanceRate: Math.round((data.presentToday / data.totalEmployees) * 100)
+    }));
+  };
+
   // Generate chart data for attendance performance
   const generateChartData = () => {
     if (!selectedMonth) return [];
@@ -226,23 +298,85 @@ const AdminDashboard = () => {
     }).filter(data => data.totalDays > 0); // Only show employees with attendance data
   };
 
+  // Data backup and sync functions
+  const backupData = async () => {
+    setBackupStatus('backing-up');
+    try {
+      const data = {
+        employees: JSON.parse(localStorage.getItem('employeeData') || '[]'),
+        attendanceRecords: JSON.parse(localStorage.getItem('attendanceRecords') || '[]'),
+        backupDate: new Date().toISOString()
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance_backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Backup Complete",
+        description: "Data has been successfully backed up to your device.",
+      });
+    } catch (error) {
+      toast({
+        title: "Backup Failed",
+        description: "Failed to create backup. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setBackupStatus('idle');
+    }
+  };
+
+  const restoreData = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setBackupStatus('restoring');
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        
+        if (data.employees && data.attendanceRecords) {
+          localStorage.setItem('employeeData', JSON.stringify(data.employees));
+          localStorage.setItem('attendanceRecords', JSON.stringify(data.attendanceRecords));
+          
+          setEmployees(data.employees);
+          setAttendanceRecords(data.attendanceRecords);
+          setFilteredRecords(data.attendanceRecords);
+
+          toast({
+            title: "Restore Complete",
+            description: `Data restored from backup created on ${new Date(data.backupDate).toLocaleDateString()}.`,
+          });
+        } else {
+          throw new Error('Invalid backup file format');
+        }
+      } catch (error) {
+        toast({
+          title: "Restore Failed",
+          description: "Invalid backup file. Please select a valid backup file.",
+          variant: "destructive",
+        });
+      } finally {
+        setBackupStatus('idle');
+      }
+    };
+    
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
+  const departmentData = getDepartmentAnalytics();
   const chartData = generateChartData();
 
-  // Chart configuration
-  const chartConfig = {
-    attendanceRate: {
-      label: "Attendance Rate (%)",
-      color: "hsl(var(--chart-1))",
-    },
-    onTimeDays: {
-      label: "On Time Days",
-      color: "hsl(var(--chart-2))",
-    },
-    lateDays: {
-      label: "Late Days",
-      color: "hsl(var(--chart-3))",
-    },
-  };
+  // Colors for department pie chart
+  const departmentColors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff00', '#ff00ff'];
 
   // Generate month options for the last 12 months
   const generateMonthOptions = () => {
@@ -293,8 +427,8 @@ const AdminDashboard = () => {
       </header>
 
       <main className="max-w-6xl mx-auto p-6">
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        {/* Enhanced Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Scans</CardTitle>
@@ -334,13 +468,27 @@ const AdminDashboard = () => {
               <div className="text-2xl font-bold text-red-600">{errorScans}</div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Today's Overtime</CardTitle>
+              <span className="text-2xl">⏱️</span>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {Math.round(departmentData.reduce((sum, dept) => sum + dept.totalOvertimeHours, 0))}h
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <Tabs defaultValue="attendance" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="attendance">Attendance Records</TabsTrigger>
             <TabsTrigger value="employees">Employee Management</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="departments">Department Analytics</TabsTrigger>
+            <TabsTrigger value="backup">Data Management</TabsTrigger>
           </TabsList>
           
           <TabsContent value="attendance">
@@ -625,7 +773,7 @@ const AdminDashboard = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ChartContainer config={chartConfig} className="h-80">
+                    <ChartContainer config={{}} className="h-80">
                       <BarChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis 
@@ -666,7 +814,7 @@ const AdminDashboard = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ChartContainer config={chartConfig} className="h-80">
+                    <ChartContainer config={{}} className="h-80">
                       <BarChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis 
@@ -759,6 +907,196 @@ const AdminDashboard = () => {
                 </Card>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="departments">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Department Analytics</h2>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Department Attendance Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Department Attendance Overview</CardTitle>
+                  <CardDescription>Today's attendance by department</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer config={{}} className="h-80">
+                    <PieChart>
+                      <Pie
+                        data={departmentData}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="presentToday"
+                        label={({ department, presentToday, totalEmployees }) => 
+                          `${department}: ${presentToday}/${totalEmployees}`
+                        }
+                      >
+                        {departmentData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={departmentColors[index % departmentColors.length]} />
+                        ))}
+                      </Pie>
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                    </PieChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+
+              {/* Department Performance Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Department Performance</CardTitle>
+                  <CardDescription>Attendance rates and overtime by department</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer config={{}} className="h-80">
+                    <BarChart data={departmentData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="department" />
+                      <YAxis />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Bar dataKey="attendanceRate" fill="#8884d8" name="Attendance Rate %" />
+                      <Bar dataKey="totalOvertimeHours" fill="#82ca9d" name="Overtime Hours" />
+                    </BarChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Department Details Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Department Performance Details</CardTitle>
+                <CardDescription>Detailed breakdown of each department's performance</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Total Employees</TableHead>
+                      <TableHead>Present Today</TableHead>
+                      <TableHead>Late Today</TableHead>
+                      <TableHead>Attendance Rate</TableHead>
+                      <TableHead>Overtime Hours</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {departmentData.map((dept) => (
+                      <TableRow key={dept.department}>
+                        <TableCell className="font-medium">{dept.department}</TableCell>
+                        <TableCell>{dept.totalEmployees}</TableCell>
+                        <TableCell>
+                          <span className="text-green-600 font-medium">{dept.presentToday}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-orange-600 font-medium">{dept.lateToday}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={dept.attendanceRate >= 90 ? 'default' : dept.attendanceRate >= 70 ? 'secondary' : 'destructive'}>
+                            {dept.attendanceRate}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-blue-600 font-medium">{Math.round(dept.totalOvertimeHours)}h</span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="backup">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Data Management</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Backup Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Data Backup</CardTitle>
+                  <CardDescription>
+                    Create a backup of all employee and attendance data
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button 
+                    onClick={backupData}
+                    disabled={backupStatus === 'backing-up'}
+                    className="w-full"
+                  >
+                    {backupStatus === 'backing-up' ? '📦 Creating Backup...' : '📦 Create Backup'}
+                  </Button>
+                  <p className="text-sm text-gray-600">
+                    This will download a JSON file containing all your data to your device.
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Restore Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Data Restore</CardTitle>
+                  <CardDescription>
+                    Restore data from a previously created backup file
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label htmlFor="restore-file">Select Backup File</Label>
+                    <Input
+                      id="restore-file"
+                      type="file"
+                      accept=".json"
+                      onChange={restoreData}
+                      disabled={backupStatus === 'restoring'}
+                    />
+                  </div>
+                  {backupStatus === 'restoring' && (
+                    <p className="text-sm text-blue-600">🔄 Restoring data...</p>
+                  )}
+                  <p className="text-sm text-gray-600">
+                    Warning: This will replace all current data with the backup data.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Data Statistics */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Current Data Statistics</CardTitle>
+                <CardDescription>Overview of your current data</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{employees.length}</div>
+                    <div className="text-sm text-gray-600">Employees</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{attendanceRecords.length}</div>
+                    <div className="text-sm text-gray-600">Attendance Records</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">{new Set(employees.map(e => e.department)).size}</div>
+                    <div className="text-sm text-gray-600">Departments</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {Math.round(departmentData.reduce((sum, dept) => sum + dept.totalOvertimeHours, 0))}h
+                    </div>
+                    <div className="text-sm text-gray-600">Total Overtime</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
