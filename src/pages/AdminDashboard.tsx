@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface Employee {
   employee_id: string;
@@ -33,6 +35,9 @@ interface AttendanceRecord {
 const AdminDashboard = () => {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [filteredRecords, setFilteredRecords] = useState<AttendanceRecord[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
+  const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
   const [newEmployee, setNewEmployee] = useState<Employee>({
     employee_id: '',
     name: '',
@@ -44,17 +49,58 @@ const AdminDashboard = () => {
   });
   const navigate = useNavigate();
 
+  // Standard work start time (9:00 AM)
+  const WORK_START_TIME = '09:00';
+
   useEffect(() => {
     const records = JSON.parse(localStorage.getItem('attendanceRecords') || '[]');
     const employeeData = JSON.parse(localStorage.getItem('employeeData') || '[]');
     setAttendanceRecords(records);
     setEmployees(employeeData);
+    setFilteredRecords(records);
   }, []);
+
+  // Calculate how many minutes late an employee is
+  const calculateLateMinutes = (checkInTime: string): number => {
+    const checkIn = new Date(`1970-01-01T${checkInTime}`);
+    const workStart = new Date(`1970-01-01T${WORK_START_TIME}:00`);
+    const diffMs = checkIn.getTime() - workStart.getTime();
+    return Math.max(0, Math.floor(diffMs / (1000 * 60)));
+  };
+
+  // Format late duration
+  const formatLateDuration = (minutes: number): string => {
+    if (minutes === 0) return 'On Time';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}m late`;
+    }
+    return `${mins}m late`;
+  };
+
+  // Filter records by employee
+  const handleEmployeeFilter = (employeeId: string) => {
+    setSelectedEmployee(employeeId);
+    if (employeeId === '') {
+      setFilteredRecords(attendanceRecords);
+    } else {
+      setFilteredRecords(attendanceRecords.filter(record => record.employeeId === employeeId));
+    }
+  };
+
+  // Filter employees by search term
+  const filteredEmployees = employees.filter(employee =>
+    employee.name.toLowerCase().includes(employeeSearchTerm.toLowerCase()) ||
+    employee.employee_id.toLowerCase().includes(employeeSearchTerm.toLowerCase()) ||
+    employee.department.toLowerCase().includes(employeeSearchTerm.toLowerCase())
+  );
 
   const clearAllRecords = () => {
     if (window.confirm('Are you sure you want to clear all attendance records?')) {
       localStorage.removeItem('attendanceRecords');
       setAttendanceRecords([]);
+      setFilteredRecords([]);
     }
   };
 
@@ -81,15 +127,16 @@ const AdminDashboard = () => {
     });
   };
 
-  const exportAttendanceToCSV = () => {
+  const exportAttendanceToCSV = (records: AttendanceRecord[] = filteredRecords, filename?: string) => {
     const csvContent = [
-      ['Employee ID', 'Employee Name', 'Check-in Time', 'Check-out Time', 'Late Status', 'Date', 'Status'],
-      ...attendanceRecords.map(record => [
+      ['Employee ID', 'Employee Name', 'Check-in Time', 'Check-out Time', 'Late Status', 'Late Duration', 'Date', 'Status'],
+      ...records.map(record => [
         record.employeeId,
         record.employeeName,
         record.checkInTime || 'N/A',
         record.checkOutTime || 'N/A',
         record.isLate ? 'Late' : 'On Time',
+        record.checkInTime && record.isLate ? formatLateDuration(calculateLateMinutes(record.checkInTime)) : 'N/A',
         new Date(record.timestamp).toLocaleDateString(),
         record.status
       ])
@@ -99,9 +146,16 @@ const AdminDashboard = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `attendance_records_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = filename || `attendance_records_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
+  };
+
+  const exportEmployeeAttendance = (employeeId: string) => {
+    const employeeRecords = attendanceRecords.filter(record => record.employeeId === employeeId);
+    const employee = employees.find(emp => emp.employee_id === employeeId);
+    const employeeName = employee ? employee.name.replace(/\s+/g, '_') : employeeId;
+    exportAttendanceToCSV(employeeRecords, `${employeeName}_attendance_${new Date().toISOString().split('T')[0]}.csv`);
   };
 
   const exportEmployeesToCSV = () => {
@@ -125,10 +179,6 @@ const AdminDashboard = () => {
     a.download = `employees_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
-  };
-
-  const formatTimestamp = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString();
   };
 
   const successfulScans = attendanceRecords.filter(r => r.status === 'success').length;
@@ -220,8 +270,8 @@ const AdminDashboard = () => {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800">Attendance Records</h2>
               <div className="space-x-2">
-                <Button onClick={exportAttendanceToCSV} variant="outline">
-                  📄 Export CSV
+                <Button onClick={() => exportAttendanceToCSV()} variant="outline">
+                  📄 Export All CSV
                 </Button>
                 <Button onClick={clearAllRecords} variant="destructive">
                   🗑️ Clear All Records
@@ -229,18 +279,52 @@ const AdminDashboard = () => {
               </div>
             </div>
 
+            {/* Employee Filter */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Filter by Employee</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4 items-end">
+                  <div className="flex-1">
+                    <Label htmlFor="employee-filter">Select Employee</Label>
+                    <select
+                      id="employee-filter"
+                      value={selectedEmployee}
+                      onChange={(e) => handleEmployeeFilter(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    >
+                      <option value="">All Employees</option>
+                      {employees.map((employee) => (
+                        <option key={employee.employee_id} value={employee.employee_id}>
+                          {employee.name} ({employee.employee_id})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {selectedEmployee && (
+                    <Button onClick={() => exportEmployeeAttendance(selectedEmployee)} variant="outline">
+                      📄 Export Employee CSV
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
-                <CardTitle>Recent Attendance Records</CardTitle>
+                <CardTitle>Attendance Records {selectedEmployee && `- ${employees.find(e => e.employee_id === selectedEmployee)?.name}`}</CardTitle>
                 <CardDescription>
-                  All QR code scans with check-in/check-out times and late status
+                  {selectedEmployee ? 'Filtered attendance records for selected employee' : 'All QR code scans with check-in/check-out times and late status'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {attendanceRecords.length === 0 ? (
+                {filteredRecords.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <p className="text-lg">No attendance records found</p>
-                    <p className="text-sm">Start scanning QR codes to see records here</p>
+                    <p className="text-sm">
+                      {selectedEmployee ? 'No records for this employee' : 'Start scanning QR codes to see records here'}
+                    </p>
                   </div>
                 ) : (
                   <Table>
@@ -250,12 +334,13 @@ const AdminDashboard = () => {
                         <TableHead>Employee Name</TableHead>
                         <TableHead>Check-in</TableHead>
                         <TableHead>Check-out</TableHead>
+                        <TableHead>Late Duration</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {attendanceRecords.map((record) => (
+                      {filteredRecords.map((record) => (
                         <TableRow key={record.id}>
                           <TableCell className="font-medium">{record.employeeId}</TableCell>
                           <TableCell>{record.employeeName}</TableCell>
@@ -268,6 +353,15 @@ const AdminDashboard = () => {
                             ) : 'N/A'}
                           </TableCell>
                           <TableCell>{record.checkOutTime || 'N/A'}</TableCell>
+                          <TableCell>
+                            {record.checkInTime && record.isLate ? (
+                              <span className="text-orange-600 font-medium">
+                                {formatLateDuration(calculateLateMinutes(record.checkInTime))}
+                              </span>
+                            ) : record.checkInTime ? (
+                              <span className="text-green-600">On Time</span>
+                            ) : 'N/A'}
+                          </TableCell>
                           <TableCell>{new Date(record.timestamp).toLocaleDateString()}</TableCell>
                           <TableCell>
                             <Badge variant={record.status === 'success' ? 'default' : 'destructive'}>
@@ -301,47 +395,41 @@ const AdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <input
+                  <Input
                     type="text"
                     placeholder="Employee ID"
                     value={newEmployee.employee_id}
                     onChange={(e) => setNewEmployee({...newEmployee, employee_id: e.target.value})}
-                    className="px-3 py-2 border border-gray-300 rounded-md"
                   />
-                  <input
+                  <Input
                     type="text"
                     placeholder="Full Name"
                     value={newEmployee.name}
                     onChange={(e) => setNewEmployee({...newEmployee, name: e.target.value})}
-                    className="px-3 py-2 border border-gray-300 rounded-md"
                   />
-                  <input
+                  <Input
                     type="email"
                     placeholder="Email"
                     value={newEmployee.email}
                     onChange={(e) => setNewEmployee({...newEmployee, email: e.target.value})}
-                    className="px-3 py-2 border border-gray-300 rounded-md"
                   />
-                  <input
+                  <Input
                     type="text"
                     placeholder="Phone"
                     value={newEmployee.phone}
                     onChange={(e) => setNewEmployee({...newEmployee, phone: e.target.value})}
-                    className="px-3 py-2 border border-gray-300 rounded-md"
                   />
-                  <input
+                  <Input
                     type="text"
                     placeholder="Department"
                     value={newEmployee.department}
                     onChange={(e) => setNewEmployee({...newEmployee, department: e.target.value})}
-                    className="px-3 py-2 border border-gray-300 rounded-md"
                   />
-                  <input
+                  <Input
                     type="text"
                     placeholder="Designation"
                     value={newEmployee.designation}
                     onChange={(e) => setNewEmployee({...newEmployee, designation: e.target.value})}
-                    className="px-3 py-2 border border-gray-300 rounded-md"
                   />
                 </div>
                 <Button onClick={addEmployee} className="mt-4">
@@ -350,19 +438,33 @@ const AdminDashboard = () => {
               </CardContent>
             </Card>
 
-            {/* Employee List */}
+            {/* Employee Search and List */}
             <Card>
               <CardHeader>
-                <CardTitle>Employee List ({employees.length})</CardTitle>
+                <CardTitle>Employee List ({filteredEmployees.length})</CardTitle>
                 <CardDescription>
-                  Manage employee data for attendance tracking
+                  Search and manage employee data for attendance tracking
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {employees.length === 0 ? (
+                <div className="mb-4">
+                  <Input
+                    type="text"
+                    placeholder="Search by name, employee ID, or department..."
+                    value={employeeSearchTerm}
+                    onChange={(e) => setEmployeeSearchTerm(e.target.value)}
+                    className="max-w-md"
+                  />
+                </div>
+                
+                {filteredEmployees.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    <p className="text-lg">No employees found</p>
-                    <p className="text-sm">Add employees to link with attendance records</p>
+                    <p className="text-lg">
+                      {employeeSearchTerm ? 'No employees found matching your search' : 'No employees found'}
+                    </p>
+                    <p className="text-sm">
+                      {employeeSearchTerm ? 'Try a different search term' : 'Add employees to link with attendance records'}
+                    </p>
                   </div>
                 ) : (
                   <Table>
@@ -374,10 +476,11 @@ const AdminDashboard = () => {
                         <TableHead>Department</TableHead>
                         <TableHead>Designation</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {employees.map((employee) => (
+                      {filteredEmployees.map((employee) => (
                         <TableRow key={employee.employee_id}>
                           <TableCell className="font-medium">{employee.employee_id}</TableCell>
                           <TableCell>{employee.name}</TableCell>
@@ -388,6 +491,15 @@ const AdminDashboard = () => {
                             <Badge variant={employee.status === 'Active' ? 'default' : 'secondary'}>
                               {employee.status}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              onClick={() => exportEmployeeAttendance(employee.employee_id)}
+                              variant="outline"
+                              size="sm"
+                            >
+                              📄 Export
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
