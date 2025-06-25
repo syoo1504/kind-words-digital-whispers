@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/components/ui/use-toast';
+import { AuthService } from '@/utils/auth';
+import { InputValidator } from '@/utils/inputValidation';
 
 const AdminLogin = () => {
   const [username, setUsername] = useState('');
@@ -16,23 +18,47 @@ const AdminLogin = () => {
     e.preventDefault();
     setLoading(true);
 
-    // Simple authentication (in production, this should be server-side)
-    if (username === 'admin' && password === 'admin123') {
-      localStorage.setItem('adminAuthenticated', 'true');
+    try {
+      // Sanitize inputs
+      const sanitizedUsername = InputValidator.sanitizeString(username);
+      const sanitizedPassword = InputValidator.sanitizeString(password);
+
+      // Validate inputs
+      if (!sanitizedUsername || !sanitizedPassword) {
+        toast({
+          title: "Invalid Input",
+          description: "Please enter valid credentials",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Attempt authentication
+      const isAuthenticated = await AuthService.login(sanitizedUsername, sanitizedPassword);
+
+      if (isAuthenticated) {
+        toast({
+          title: "Login Successful",
+          description: "Welcome to Admin Dashboard",
+        });
+        navigate('/admin');
+      } else {
+        toast({
+          title: "Login Failed",
+          description: "Invalid username or password",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Login error:', error);
       toast({
-        title: "Login Successful",
-        description: "Welcome to Admin Dashboard",
-      });
-      navigate('/admin');
-    } else {
-      toast({
-        title: "Login Failed",
-        description: "Invalid username or password",
+        title: "Login Error",
+        description: "An error occurred during login. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
@@ -57,6 +83,7 @@ const AdminLogin = () => {
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                maxLength={50}
                 required
               />
             </div>
@@ -66,6 +93,7 @@ const AdminLogin = () => {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                maxLength={100}
                 required
               />
             </div>
