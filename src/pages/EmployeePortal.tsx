@@ -95,7 +95,7 @@ const EmployeePortal = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-300 to-blue-100">
+    <div className="min-h-screen bg-gradient-to-br from-blue-300 to-gray-100">
       <EmployeePortalHeader />
 
       <main className="flex flex-col items-center py-8">
