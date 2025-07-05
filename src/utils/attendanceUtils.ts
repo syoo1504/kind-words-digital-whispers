@@ -1,4 +1,6 @@
 
+import { SecureDataService } from '@/services/secureDataService';
+
 export interface Employee {
   employee_id: string;
   name: string;
@@ -33,7 +35,7 @@ export class AttendanceUtils {
   private static readonly WORK_START_TIME = '09:00';
 
   static getEmployeeData(): Employee[] {
-    return JSON.parse(localStorage.getItem('employeeData') || '[]');
+    return SecureDataService.getEmployeeData();
   }
 
   static findEmployee(employeeId: string): Employee | null {
@@ -48,7 +50,7 @@ export class AttendanceUtils {
   }
 
   static getLastAttendanceRecord(employeeId: string): AttendanceRecord | null {
-    const records = JSON.parse(localStorage.getItem('attendanceRecords') || '[]');
+    const records = SecureDataService.getAttendanceRecords();
     const employeeRecords = records.filter((r: AttendanceRecord) => r.employeeId === employeeId);
     
     // Get today's records only
@@ -61,7 +63,7 @@ export class AttendanceUtils {
   }
 
   static saveAttendanceRecord(record: AttendanceRecord): void {
-    const existingRecords = JSON.parse(localStorage.getItem('attendanceRecords') || '[]');
+    const existingRecords = SecureDataService.getAttendanceRecords();
     
     // Check if updating existing record or creating new one
     const existingIndex = existingRecords.findIndex((r: AttendanceRecord) => 
@@ -74,14 +76,11 @@ export class AttendanceUtils {
       existingRecords[existingIndex].checkOutTime = record.checkOutTime;
       existingRecords[existingIndex].type = 'check-out';
       existingRecords[existingIndex].overtimeHours = record.overtimeHours;
+      SecureDataService.saveAttendanceRecords(existingRecords);
     } else {
       // Add new record
-      const updatedRecords = [record, ...existingRecords];
-      localStorage.setItem('attendanceRecords', JSON.stringify(updatedRecords));
-      return;
+      SecureDataService.addAttendanceRecord(record);
     }
-    
-    localStorage.setItem('attendanceRecords', JSON.stringify(existingRecords));
   }
 
   static calculateOvertimeHours(checkInTime: string, checkOutTime: string): number {
