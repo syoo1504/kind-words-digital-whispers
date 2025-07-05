@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { toast } from '@/components/ui/use-toast';
+import AdminLogout from '@/components/AdminLogout';
 
 interface Employee {
   employee_id: string;
@@ -422,6 +423,7 @@ const AdminDashboard = () => {
               <span>📊</span>
               <span>Admin Dashboard</span>
             </button>
+            <AdminLogout />
           </nav>
         </div>
       </header>
