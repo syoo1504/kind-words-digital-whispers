@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import QRScanner from '@/components/QRScanner';
+import CameraScanner from '@/components/CameraScanner';
 import AttendanceStatus from '@/components/AttendanceStatus';
 import AttendanceInstructions from '@/components/AttendanceInstructions';
 import EmployeePortalHeader from '@/components/EmployeePortalHeader';
@@ -10,7 +10,6 @@ import { AttendanceUtils, AttendanceRecord } from '@/utils/attendanceUtils';
 
 const EmployeePortal = () => {
   const [status, setStatus] = useState('Waiting for QR scan...');
-  const [isScanning, setIsScanning] = useState(true);
 
   const playBeepSound = () => {
     const beep = new Audio('/beep.mp3');
@@ -83,15 +82,10 @@ const EmployeePortal = () => {
       }
     }
 
-    // Stop scanner and reload after 5 seconds
-    setIsScanning(false);
+    // Reload after 5 seconds
     setTimeout(() => {
       window.location.reload();
     }, 5000);
-  };
-
-  const onScanFailure = (error: string) => {
-    console.log('Scan error:', error);
   };
 
   return (
@@ -99,11 +93,7 @@ const EmployeePortal = () => {
       <EmployeePortalHeader />
 
       <main className="flex flex-col items-center py-8">
-        <QRScanner 
-          onScanSuccess={onScanSuccess}
-          onScanFailure={onScanFailure}
-          isScanning={isScanning}
-        />
+        <CameraScanner onScanSuccess={onScanSuccess} />
         
         <AttendanceStatus status={status} />
 
