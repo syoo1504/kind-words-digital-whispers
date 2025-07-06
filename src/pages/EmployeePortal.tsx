@@ -6,7 +6,8 @@ import AttendanceStatus from '@/components/AttendanceStatus';
 import AttendanceInstructions from '@/components/AttendanceInstructions';
 import EmployeePortalHeader from '@/components/EmployeePortalHeader';
 import EmployeePortalFooter from '@/components/EmployeePortalFooter';
-import { AttendanceUtils, AttendanceRecord } from '@/utils/attendanceUtils';
+import { EmployeeUtils, AttendanceRecordUtils, TimeUtils } from '@/utils/attendanceUtils';
+import { AttendanceRecord } from '@/types/attendance';
 
 const EmployeePortal = () => {
   const [status, setStatus] = useState('Waiting for QR scan...');
@@ -17,7 +18,7 @@ const EmployeePortal = () => {
   };
 
   const processAttendance = (employeeId: string, employeeName: string, qrText: string) => {
-    const lastRecord = AttendanceUtils.getLastAttendanceRecord(employeeId);
+    const lastRecord = AttendanceRecordUtils.getLastAttendanceRecord(employeeId);
     const currentTime = new Date();
     const timeString = currentTime.toTimeString().slice(0, 5);
     
@@ -27,7 +28,7 @@ const EmployeePortal = () => {
     if (!lastRecord || lastRecord.checkOutTime) {
       // Check-in logic
       attendanceType = 'check-in';
-      const isLate = AttendanceUtils.isLateArrival(timeString);
+      const isLate = TimeUtils.isLateArrival(timeString);
       statusMessage = `✅ Check-in Successful!\nEmployee: ${employeeName}\nTime: ${timeString}${isLate ? ' (LATE)' : ''}`;
       
       const attendanceRecord: AttendanceRecord = {
@@ -42,11 +43,11 @@ const EmployeePortal = () => {
         type: attendanceType
       };
       
-      AttendanceUtils.saveAttendanceRecord(attendanceRecord);
+      AttendanceRecordUtils.saveAttendanceRecord(attendanceRecord);
     } else {
       // Check-out logic with overtime calculation
       attendanceType = 'check-out';
-      const overtimeHours = AttendanceUtils.calculateOvertimeHours(lastRecord.checkInTime || '', timeString);
+      const overtimeHours = TimeUtils.calculateOvertimeHours(lastRecord.checkInTime || '', timeString);
       const overtimeText = overtimeHours > 0 ? `\n⏱️ Overtime: ${overtimeHours.toFixed(1)}h` : '';
       statusMessage = `✅ Check-out Successful!\nEmployee: ${employeeName}\nTime: ${timeString}${overtimeText}`;
       
@@ -58,7 +59,7 @@ const EmployeePortal = () => {
         overtimeHours: overtimeHours
       };
       
-      AttendanceUtils.saveAttendanceRecord(attendanceRecord);
+      AttendanceRecordUtils.saveAttendanceRecord(attendanceRecord);
     }
 
     setStatus(statusMessage);
@@ -67,12 +68,12 @@ const EmployeePortal = () => {
   const onScanSuccess = (qrText: string) => {
     playBeepSound();
 
-    const { employeeId, success } = AttendanceUtils.extractEmployeeIdFromQR(qrText);
+    const { employeeId, success } = EmployeeUtils.extractEmployeeIdFromQR(qrText);
 
     if (!success) {
       setStatus(`❌ Invalid QR format.\nQR Data: ${qrText}`);
     } else {
-      const employee = AttendanceUtils.findEmployee(employeeId);
+      const employee = EmployeeUtils.findEmployee(employeeId);
       const employeeName = employee ? employee.name : 'Unknown Employee';
       
       if (!employee) {
