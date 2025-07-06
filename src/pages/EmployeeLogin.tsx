@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/components/ui/use-toast';
 import { InputValidator } from '@/utils/inputValidation';
-import { AttendanceUtils } from '@/utils/attendanceUtils';
+import { EmployeeUtils } from '@/utils/attendanceUtils';
 
 const EmployeeLogin = () => {
   const [employeeId, setEmployeeId] = useState('');
@@ -31,7 +31,7 @@ const EmployeeLogin = () => {
         return;
       }
 
-      const employee = AttendanceUtils.findEmployee(sanitizedEmployeeId);
+      const employee = EmployeeUtils.findEmployee(sanitizedEmployeeId);
       
       if (employee && sanitizedPassword === 'emp123') {
         localStorage.setItem('employee_session', JSON.stringify({
