@@ -1,3 +1,4 @@
+
 import { DataEncryption } from '@/utils/dataEncryption';
 import { InputValidator } from '@/utils/inputValidation';
 import { AuthService } from '@/utils/auth';
@@ -71,6 +72,9 @@ export class SecureDataService {
       const encryptedData = DataEncryption.encryptSensitiveData(validatedEmployees);
       localStorage.setItem(this.EMPLOYEE_DATA_KEY, encryptedData);
       
+      // Also update legacy storage for backward compatibility
+      localStorage.setItem('employeeData', JSON.stringify(validatedEmployees));
+      
       // Log the operation for audit
       this.logDataOperation('employee_data_update', validatedEmployees.length);
       
@@ -112,6 +116,59 @@ export class SecureDataService {
     }
   }
 
+  static updateEmployee(employeeId: string, updatedEmployee: Employee): boolean {
+    try {
+      const employees = this.getEmployeeData();
+      const index = employees.findIndex(emp => emp.employee_id === employeeId);
+      
+      if (index === -1) {
+        throw new Error('Employee not found');
+      }
+
+      // Validate updated employee data
+      if (!InputValidator.validateEmployeeId(updatedEmployee.employee_id)) {
+        throw new Error('Invalid employee ID');
+      }
+      if (!InputValidator.validateEmployeeName(updatedEmployee.name)) {
+        throw new Error('Invalid employee name');
+      }
+      if (updatedEmployee.email && !InputValidator.validateEmail(updatedEmployee.email)) {
+        throw new Error('Invalid email address');
+      }
+      if (updatedEmployee.phone && !InputValidator.validatePhone(updatedEmployee.phone)) {
+        throw new Error('Invalid phone number');
+      }
+
+      // Check for duplicate employee ID (excluding current employee)
+      if (updatedEmployee.employee_id !== employeeId && 
+          employees.some(emp => emp.employee_id === updatedEmployee.employee_id)) {
+        throw new Error('Employee ID already exists');
+      }
+
+      employees[index] = updatedEmployee;
+      return this.saveEmployeeData(employees);
+    } catch (error) {
+      console.error('Error updating employee:', error);
+      return false;
+    }
+  }
+
+  static deleteEmployee(employeeId: string): boolean {
+    try {
+      const employees = this.getEmployeeData();
+      const filteredEmployees = employees.filter(emp => emp.employee_id !== employeeId);
+      
+      if (filteredEmployees.length === employees.length) {
+        throw new Error('Employee not found');
+      }
+
+      return this.saveEmployeeData(filteredEmployees);
+    } catch (error) {
+      console.error('Error deleting employee:', error);
+      return false;
+    }
+  }
+
   // Attendance data operations
   static getAttendanceRecords(): AttendanceRecord[] {
     try {
@@ -148,6 +205,9 @@ export class SecureDataService {
 
       const encryptedData = DataEncryption.encryptSensitiveData(validatedRecords);
       localStorage.setItem(this.ATTENDANCE_DATA_KEY, encryptedData);
+      
+      // Also update legacy storage for backward compatibility
+      localStorage.setItem('attendanceRecords', JSON.stringify(validatedRecords));
       
       // Log the operation for audit
       this.logDataOperation('attendance_data_update', validatedRecords.length);
@@ -224,7 +284,6 @@ export class SecureDataService {
     }
   }
 
-  // Audit logging
   private static logDataOperation(operation: string, recordCount: number): void {
     const sessionData = AuthService.getSessionData();
     const logEntry = {
@@ -252,7 +311,6 @@ export class SecureDataService {
     return btoa(combined).slice(0, 16); // Simple checksum
   }
 
-  // Data cleanup
   static clearAllData(): boolean {
     if (!AuthService.isAuthenticated()) {
       throw new Error('Authentication required for data operations');

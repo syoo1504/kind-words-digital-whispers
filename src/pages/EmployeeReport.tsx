@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import EmployeePortalHeader from '@/components/EmployeePortalHeader';
 import EmployeePortalFooter from '@/components/EmployeePortalFooter';
 import EmployeeNavigation from '@/components/EmployeeNavigation';
-import { AttendanceRecord } from '@/utils/attendanceUtils';
+import { AttendanceRecord } from '@/types/attendance';
+import { SecureDataService } from '@/services/secureDataService';
 
 const EmployeeReport = () => {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
@@ -17,12 +18,16 @@ const EmployeeReport = () => {
     if (sessionData) {
       const session = JSON.parse(sessionData);
       setCurrentEmployee(session);
+      console.log('Current employee session:', session);
       
-      // Get all attendance records for current employee
-      const allRecords = JSON.parse(localStorage.getItem('attendanceRecords') || '[]');
+      // Get all attendance records for current employee from SecureDataService
+      const allRecords = SecureDataService.getAttendanceRecords();
+      console.log('All attendance records:', allRecords);
+      
       const employeeRecords = allRecords.filter((record: AttendanceRecord) => 
         record.employeeId === session.employeeId
       );
+      console.log('Employee records for', session.employeeId, ':', employeeRecords);
       
       // Sort by timestamp (newest first)
       employeeRecords.sort((a: AttendanceRecord, b: AttendanceRecord) => 
@@ -96,6 +101,12 @@ const EmployeeReport = () => {
             <CardContent className="text-center py-8">
               <p className="text-gray-500 text-lg">No attendance records found</p>
               <p className="text-gray-400">Start scanning QR codes to build your attendance history</p>
+              <Button 
+                className="mt-4"
+                onClick={() => window.location.href = '/employee/scan'}
+              >
+                Go to QR Scanner
+              </Button>
             </CardContent>
           </Card>
         ) : (

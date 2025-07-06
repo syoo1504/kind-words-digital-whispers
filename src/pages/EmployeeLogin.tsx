@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/components/ui/use-toast';
 import { InputValidator } from '@/utils/inputValidation';
-import { EmployeeUtils } from '@/utils/attendanceUtils';
+import { SecureDataService } from '@/services/secureDataService';
 
 const EmployeeLogin = () => {
   const [employeeId, setEmployeeId] = useState('');
@@ -31,9 +31,14 @@ const EmployeeLogin = () => {
         return;
       }
 
-      const employee = EmployeeUtils.findEmployee(sanitizedEmployeeId);
+      // Get employees directly from SecureDataService for data consistency
+      const employees = SecureDataService.getEmployeeData();
+      console.log('Available employees for login:', employees.map(emp => emp.employee_id));
+      console.log('Looking for employee ID:', sanitizedEmployeeId);
       
-      if (employee && sanitizedPassword === 'emp123') {
+      const employee = employees.find(emp => emp.employee_id === sanitizedEmployeeId);
+      
+      if (employee && employee.status === 'Active' && sanitizedPassword === 'emp123') {
         localStorage.setItem('employee_session', JSON.stringify({
           employeeId: sanitizedEmployeeId,
           employeeName: employee.name,
@@ -45,6 +50,12 @@ const EmployeeLogin = () => {
           description: `Welcome ${employee.name}`,
         });
         navigate('/employee/scan');
+      } else if (employee && employee.status !== 'Active') {
+        toast({
+          title: "Login Failed",
+          description: "Employee account is inactive. Please contact administrator.",
+          variant: "destructive",
+        });
       } else {
         toast({
           title: "Login Failed",
