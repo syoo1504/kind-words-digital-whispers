@@ -60,15 +60,26 @@ const ExportReports = () => {
   };
 
   const calculateLateDuration = (checkInTime: string) => {
-    if (!checkInTime) return 0;
+    if (!checkInTime) return { hours: 0, minutes: 0, totalMinutes: 0 };
     
     const checkIn = new Date(`1970-01-01T${checkInTime}`);
     const workStart = new Date(`1970-01-01T09:00:00`);
     
-    if (checkIn <= workStart) return 0;
+    if (checkIn <= workStart) return { hours: 0, minutes: 0, totalMinutes: 0 };
     
     const diffMs = checkIn.getTime() - workStart.getTime();
-    return Math.round(diffMs / (1000 * 60)); // Return minutes late
+    const totalMinutes = Math.round(diffMs / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    
+    return { hours, minutes, totalMinutes };
+  };
+
+  const formatLateDurationForExport = (hours: number, minutes: number) => {
+    if (hours === 0 && minutes === 0) return '0h 0m';
+    if (hours === 0) return `0h ${minutes}m`;
+    if (minutes === 0) return `${hours}h 0m`;
+    return `${hours}h ${minutes}m`;
   };
 
   const exportSummaryReport = () => {
@@ -85,7 +96,7 @@ const ExportReports = () => {
       const lateDays = empRecords.filter(r => r.isLate).length;
       const totalLateMinutes = empRecords
         .filter(r => r.isLate && r.checkInTime)
-        .reduce((sum, r) => sum + calculateLateDuration(r.checkInTime!), 0);
+        .reduce((sum, r) => sum + calculateLateDuration(r.checkInTime!).totalMinutes, 0);
       
       const workingHours = empRecords.reduce((sum, record) => {
         if (record.checkInTime && record.checkOutTime) {
@@ -97,6 +108,9 @@ const ExportReports = () => {
         return sum;
       }, 0);
 
+      const avgLateHours = lateDays > 0 ? Math.floor(totalLateMinutes / lateDays / 60) : 0;
+      const avgLateMinutes = lateDays > 0 ? (totalLateMinutes / lateDays) % 60 : 0;
+
       return {
         employeeId: empId,
         employeeName: employee?.name || 'Unknown',
@@ -104,8 +118,10 @@ const ExportReports = () => {
         totalDays,
         lateDays,
         punctualityRate: totalDays > 0 ? Math.round(((totalDays - lateDays) / totalDays) * 100) : 100,
-        totalLateMinutes,
-        avgLateMinutes: lateDays > 0 ? Math.round(totalLateMinutes / lateDays) : 0,
+        totalLateHours: Math.floor(totalLateMinutes / 60),
+        totalLateMinutesRemainder: totalLateMinutes % 60,
+        avgLateHours,
+        avgLateMinutes: Math.round(avgLateMinutes),
         totalWorkingHours: Math.round(workingHours * 100) / 100,
         avgWorkingHoursPerDay: totalDays > 0 ? Math.round((workingHours / totalDays) * 100) / 100 : 0
       };
@@ -114,13 +130,15 @@ const ExportReports = () => {
     const csvContent = [
       [
         'Employee ID', 'Employee Name', 'Department', 'Total Days', 'Late Days', 
-        'Punctuality Rate (%)', 'Total Late Minutes', 'Avg Late Minutes', 
+        'Punctuality Rate (%)', 'Total Late Duration', 'Avg Late Duration', 
         'Total Working Hours', 'Avg Working Hours/Day'
       ],
       ...reportData.map(row => [
         row.employeeId, row.employeeName, row.department, row.totalDays, 
-        row.lateDays, row.punctualityRate, row.totalLateMinutes, 
-        row.avgLateMinutes, row.totalWorkingHours, row.avgWorkingHoursPerDay
+        row.lateDays, row.punctualityRate, 
+        formatLateDurationForExport(row.totalLateHours, row.totalLateMinutesRemainder),
+        formatLateDurationForExport(row.avgLateHours, row.avgLateMinutes),
+        row.totalWorkingHours, row.avgWorkingHoursPerDay
       ])
     ].map(row => row.join(',')).join('\n');
 
@@ -133,11 +151,11 @@ const ExportReports = () => {
     const csvContent = [
       [
         'Date', 'Employee ID', 'Employee Name', 'Department', 'Check In', 
-        'Check Out', 'Late', 'Late Duration (minutes)', 'Working Hours', 'Overtime Hours'
+        'Check Out', 'Late', 'Late Duration', 'Working Hours', 'Overtime Hours'
       ],
       ...filtered.map(record => {
         const employee = employees.find(emp => emp.employee_id === record.employeeId);
-        const lateMinutes = record.isLate && record.checkInTime ? calculateLateDuration(record.checkInTime) : 0;
+        const lateDuration = record.isLate && record.checkInTime ? calculateLateDuration(record.checkInTime) : { hours: 0, minutes: 0, totalMinutes: 0 };
         
         let workingHours = 0;
         if (record.checkInTime && record.checkOutTime) {
@@ -155,7 +173,7 @@ const ExportReports = () => {
           record.checkInTime || 'N/A',
           record.checkOutTime || 'N/A',
           record.isLate ? 'Yes' : 'No',
-          lateMinutes,
+          formatLateDurationForExport(lateDuration.hours, lateDuration.minutes),
           workingHours,
           record.overtimeHours || 0
         ];

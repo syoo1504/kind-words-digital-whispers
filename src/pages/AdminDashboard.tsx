@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -89,15 +90,26 @@ const AdminDashboard = () => {
   };
 
   const calculateLateDuration = (checkInTime: string) => {
-    if (!checkInTime) return 0;
+    if (!checkInTime) return { hours: 0, minutes: 0, totalMinutes: 0 };
     
     const checkIn = new Date(`1970-01-01T${checkInTime}`);
     const workStart = new Date(`1970-01-01T09:00:00`);
     
-    if (checkIn <= workStart) return 0;
+    if (checkIn <= workStart) return { hours: 0, minutes: 0, totalMinutes: 0 };
     
     const diffMs = checkIn.getTime() - workStart.getTime();
-    return Math.round(diffMs / (1000 * 60)); // Return minutes late
+    const totalMinutes = Math.round(diffMs / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    
+    return { hours, minutes, totalMinutes };
+  };
+
+  const formatLateDuration = (hours: number, minutes: number) => {
+    if (hours === 0 && minutes === 0) return 'On time';
+    if (hours === 0) return `${minutes}m`;
+    if (minutes === 0) return `${hours}h`;
+    return `${hours}h ${minutes}m`;
   };
 
   const stats = calculateStats();
@@ -181,7 +193,7 @@ const AdminDashboard = () => {
 
         {/* Tabs */}
         <Tabs defaultValue="attendance" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="attendance">Attendance Records</TabsTrigger>
             <TabsTrigger value="employees">Employee Management</TabsTrigger>
             <TabsTrigger value="analytics">Department Analytics</TabsTrigger>
@@ -256,7 +268,7 @@ const AdminDashboard = () => {
                       {filteredRecords.map((record) => {
                         const lateDuration = record.isLate && record.checkInTime 
                           ? calculateLateDuration(record.checkInTime)
-                          : 0;
+                          : { hours: 0, minutes: 0, totalMinutes: 0 };
                         
                         return (
                           <TableRow key={record.id}>
@@ -280,9 +292,9 @@ const AdminDashboard = () => {
                               {record.checkOutTime || <span className="text-gray-400">-</span>}
                             </TableCell>
                             <TableCell>
-                              {lateDuration > 0 ? (
+                              {lateDuration.totalMinutes > 0 ? (
                                 <Badge variant="destructive">
-                                  {lateDuration} min{lateDuration !== 1 ? 's' : ''}
+                                  {formatLateDuration(lateDuration.hours, lateDuration.minutes)}
                                 </Badge>
                               ) : (
                                 <span className="text-gray-400">On time</span>
