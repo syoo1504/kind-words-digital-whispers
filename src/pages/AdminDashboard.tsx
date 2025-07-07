@@ -12,6 +12,10 @@ import { Users, Calendar, Clock, BarChart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminLogout from '@/components/AdminLogout';
 import EmployeeManagement from '@/components/EmployeeManagement';
+import EmployeeMasterlist from '@/components/EmployeeMasterlist';
+import DepartmentAnalytics from '@/components/DepartmentAnalytics';
+import ExportReports from '@/components/ExportReports';
+import BackupSync from '@/components/BackupSync';
 import { SecureDataService } from '@/services/secureDataService';
 import { AttendanceRecord, Employee } from '@/types/attendance';
 
@@ -83,6 +87,18 @@ const AdminDashboard = () => {
       checkedOutToday,
       lateToday
     };
+  };
+
+  const calculateLateDuration = (checkInTime: string) => {
+    if (!checkInTime) return 0;
+    
+    const checkIn = new Date(`1970-01-01T${checkInTime}`);
+    const workStart = new Date(`1970-01-01T09:00:00`);
+    
+    if (checkIn <= workStart) return 0;
+    
+    const diffMs = checkIn.getTime() - workStart.getTime();
+    return Math.round(diffMs / (1000 * 60)); // Return minutes late
   };
 
   const stats = calculateStats();
@@ -166,9 +182,13 @@ const AdminDashboard = () => {
 
         {/* Tabs */}
         <Tabs defaultValue="attendance" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="attendance">Attendance Records</TabsTrigger>
             <TabsTrigger value="employees">Employee Management</TabsTrigger>
+            <TabsTrigger value="masterlist">Employee Masterlist</TabsTrigger>
+            <TabsTrigger value="analytics">Department Analytics</TabsTrigger>
+            <TabsTrigger value="reports">Export Reports</TabsTrigger>
+            <TabsTrigger value="backup">Backup & Sync</TabsTrigger>
           </TabsList>
 
           {/* Attendance Records Tab */}
@@ -179,7 +199,7 @@ const AdminDashboard = () => {
                   <div>
                     <CardTitle>Attendance Records</CardTitle>
                     <CardDescription>
-                      View and filter employee attendance records
+                      View and filter employee attendance records with late duration tracking
                     </CardDescription>
                   </div>
                   <Button onClick={clearAllData} variant="destructive">
@@ -230,38 +250,54 @@ const AdminDashboard = () => {
                         <TableHead>Date</TableHead>
                         <TableHead>Check In</TableHead>
                         <TableHead>Check Out</TableHead>
+                        <TableHead>Late Duration</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredRecords.map((record) => (
-                        <TableRow key={record.id}>
-                          <TableCell>
-                            {record.employeeName} ({record.employeeId})
-                          </TableCell>
-                          <TableCell>{formatDate(record.timestamp)}</TableCell>
-                          <TableCell>
-                            {record.checkInTime ? (
-                              <div className="flex items-center space-x-2">
-                                <span>{record.checkInTime}</span>
-                                {record.isLate && (
-                                  <Badge variant="destructive">Late</Badge>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {record.checkOutTime || <span className="text-gray-400">-</span>}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={record.status === 'success' ? 'default' : 'destructive'}>
-                              {record.status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {filteredRecords.map((record) => {
+                        const lateDuration = record.isLate && record.checkInTime 
+                          ? calculateLateDuration(record.checkInTime)
+                          : 0;
+                        
+                        return (
+                          <TableRow key={record.id}>
+                            <TableCell>
+                              {record.employeeName} ({record.employeeId})
+                            </TableCell>
+                            <TableCell>{formatDate(record.timestamp)}</TableCell>
+                            <TableCell>
+                              {record.checkInTime ? (
+                                <div className="flex items-center space-x-2">
+                                  <span>{record.checkInTime}</span>
+                                  {record.isLate && (
+                                    <Badge variant="destructive">Late</Badge>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {record.checkOutTime || <span className="text-gray-400">-</span>}
+                            </TableCell>
+                            <TableCell>
+                              {lateDuration > 0 ? (
+                                <Badge variant="destructive">
+                                  {lateDuration} min{lateDuration !== 1 ? 's' : ''}
+                                </Badge>
+                              ) : (
+                                <span className="text-gray-400">On time</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={record.status === 'success' ? 'default' : 'destructive'}>
+                                {record.status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 )}
@@ -272,6 +308,26 @@ const AdminDashboard = () => {
           {/* Employee Management Tab */}
           <TabsContent value="employees">
             <EmployeeManagement />
+          </TabsContent>
+
+          {/* Employee Masterlist Tab */}
+          <TabsContent value="masterlist">
+            <EmployeeMasterlist />
+          </TabsContent>
+
+          {/* Department Analytics Tab */}
+          <TabsContent value="analytics">
+            <DepartmentAnalytics />
+          </TabsContent>
+
+          {/* Export Reports Tab */}
+          <TabsContent value="reports">
+            <ExportReports />
+          </TabsContent>
+
+          {/* Backup & Sync Tab */}
+          <TabsContent value="backup">
+            <BackupSync />
           </TabsContent>
         </Tabs>
       </main>

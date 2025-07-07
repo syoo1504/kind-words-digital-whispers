@@ -17,6 +17,7 @@ export interface AttendanceRecord {
   checkInTime?: string;
   checkOutTime?: string;
   isLate: boolean;
+  lateDurationMinutes?: number;
   timestamp: string;
   status: 'success' | 'error';
   type: 'check-in' | 'check-out';

@@ -1,4 +1,3 @@
-
 import { ScanResult, AttendanceRecord } from '@/types/attendance';
 import { EmployeeUtils } from './employeeUtils';
 import { AttendanceRecordUtils } from './attendanceRecordUtils';
@@ -37,6 +36,17 @@ export const processAttendanceScan = (qrData: string): ScanResult => {
     const now = new Date();
     const currentTime = now.toTimeString().substring(0, 5); // HH:MM format
     
+    // Calculate late duration if applicable
+    const calculateLateDuration = (checkInTime: string): number => {
+      const checkIn = new Date(`1970-01-01T${checkInTime}`);
+      const workStart = new Date(`1970-01-01T09:00:00`);
+      
+      if (checkIn <= workStart) return 0;
+      
+      const diffMs = checkIn.getTime() - workStart.getTime();
+      return Math.round(diffMs / (1000 * 60)); // Return minutes late
+    };
+    
     // Check if there's already a record for today
     const lastRecord = AttendanceRecordUtils.getLastAttendanceRecord(employeeId);
     
@@ -70,6 +80,7 @@ export const processAttendanceScan = (qrData: string): ScanResult => {
     } else {
       // This is a check-in
       const isLate = TimeUtils.isLateArrival(currentTime);
+      const lateDurationMinutes = isLate ? calculateLateDuration(currentTime) : 0;
       
       const newRecord: AttendanceRecord = {
         id: `${employeeId}_${now.getTime()}`,
@@ -78,13 +89,14 @@ export const processAttendanceScan = (qrData: string): ScanResult => {
         qrData,
         checkInTime: currentTime,
         isLate,
+        lateDurationMinutes,
         timestamp: now.toISOString(),
         status: 'success',
         type: 'check-in'
       };
       
       AttendanceRecordUtils.saveAttendanceRecord(newRecord);
-      message = `Check-in successful at ${currentTime}. ${isLate ? 'Note: You are late today.' : 'Welcome to work!'}`;
+      message = `Check-in successful at ${currentTime}. ${isLate ? `Note: You are ${lateDurationMinutes} minutes late.` : 'Welcome to work!'}`;
       
       return {
         success: true,
