@@ -38,7 +38,7 @@ const EmployeeLogin = () => {
       
       const employee = employees.find(emp => emp.employee_id === sanitizedEmployeeId);
       
-      if (employee && employee.status === 'Active' && sanitizedPassword === 'emp123') {
+      if (employee && (employee.status === 'Active' || employee.status === 'active') && sanitizedPassword === 'emp123') {
         localStorage.setItem('employee_session', JSON.stringify({
           employeeId: sanitizedEmployeeId,
           employeeName: employee.name,
@@ -50,7 +50,7 @@ const EmployeeLogin = () => {
           description: `Welcome ${employee.name}`,
         });
         navigate('/employee/scan');
-      } else if (employee && employee.status !== 'Active') {
+      } else if (employee && employee.status !== 'Active' && employee.status !== 'active') {
         toast({
           title: "Login Failed",
           description: "Employee account is inactive. Please contact administrator.",

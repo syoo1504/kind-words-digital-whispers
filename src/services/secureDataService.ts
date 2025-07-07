@@ -1,4 +1,3 @@
-
 import { DataEncryption } from '@/utils/dataEncryption';
 import { InputValidator } from '@/utils/inputValidation';
 import { AuthService } from '@/utils/auth';
@@ -31,26 +30,60 @@ export class SecureDataService {
   private static readonly EMPLOYEE_DATA_KEY = 'secure_employee_data';
   private static readonly ATTENDANCE_DATA_KEY = 'secure_attendance_data';
 
+  // Initialize with sample data for fresh start
+  static initializeSampleData(): void {
+    const sampleEmployees: Employee[] = [
+      {
+        employee_id: 'EMP001',
+        name: 'John Doe',
+        email: 'john.doe@company.com',
+        phone: '+1234567890',
+        department: 'IT',
+        designation: 'Software Developer',
+        status: 'Active'
+      },
+      {
+        employee_id: 'EMP002',
+        name: 'Jane Smith',
+        email: 'jane.smith@company.com',
+        phone: '+1234567891',
+        department: 'HR',
+        designation: 'HR Manager',
+        status: 'Active'
+      }
+    ];
+
+    this.saveEmployeeData(sampleEmployees);
+    this.saveAttendanceRecords([]);
+  }
+
   // Employee data operations
   static getEmployeeData(): Employee[] {
     try {
       const encryptedData = localStorage.getItem(this.EMPLOYEE_DATA_KEY);
       if (!encryptedData) {
-        // Fallback to unencrypted data for migration
-        const fallbackData = localStorage.getItem('employeeData');
-        if (fallbackData) {
-          const data = JSON.parse(fallbackData);
-          this.saveEmployeeData(data); // Migrate to encrypted storage
-          localStorage.removeItem('employeeData'); // Remove unencrypted data
-          return data;
-        }
-        return [];
+        // Initialize with sample data if no data exists
+        this.initializeSampleData();
+        return this.getEmployeeData();
       }
       
       const decryptedData = DataEncryption.decryptSensitiveData(encryptedData);
       return decryptedData || [];
     } catch (error) {
       console.error('Error retrieving employee data:', error);
+      // If decryption fails, try to get from localStorage directly
+      const fallbackData = localStorage.getItem('employeeData');
+      if (fallbackData) {
+        try {
+          const data = JSON.parse(fallbackData);
+          this.saveEmployeeData(data); // Re-encrypt and save
+          return data;
+        } catch {
+          // If all fails, initialize with sample data
+          this.initializeSampleData();
+          return this.getEmployeeData();
+        }
+      }
       return [];
     }
   }
@@ -174,14 +207,7 @@ export class SecureDataService {
     try {
       const encryptedData = localStorage.getItem(this.ATTENDANCE_DATA_KEY);
       if (!encryptedData) {
-        // Fallback to unencrypted data for migration
-        const fallbackData = localStorage.getItem('attendanceRecords');
-        if (fallbackData) {
-          const data = JSON.parse(fallbackData);
-          this.saveAttendanceRecords(data); // Migrate to encrypted storage
-          localStorage.removeItem('attendanceRecords'); // Remove unencrypted data
-          return data;
-        }
+        // Return empty array if no attendance data
         return [];
       }
       
@@ -189,6 +215,17 @@ export class SecureDataService {
       return decryptedData || [];
     } catch (error) {
       console.error('Error retrieving attendance data:', error);
+      // If decryption fails, try to get from localStorage directly
+      const fallbackData = localStorage.getItem('attendanceRecords');
+      if (fallbackData) {
+        try {
+          const data = JSON.parse(fallbackData);
+          this.saveAttendanceRecords(data); // Re-encrypt and save
+          return data;
+        } catch {
+          return [];
+        }
+      }
       return [];
     }
   }
@@ -226,6 +263,25 @@ export class SecureDataService {
       return this.saveAttendanceRecords(records);
     } catch (error) {
       console.error('Error adding attendance record:', error);
+      return false;
+    }
+  }
+
+  // Clear all data and reinitialize
+  static clearAllData(): boolean {
+    try {
+      localStorage.removeItem(this.EMPLOYEE_DATA_KEY);
+      localStorage.removeItem(this.ATTENDANCE_DATA_KEY);
+      localStorage.removeItem('employeeData'); // Remove legacy data
+      localStorage.removeItem('attendanceRecords'); // Remove legacy data
+      
+      // Initialize with sample data for fresh start
+      this.initializeSampleData();
+      
+      this.logDataOperation('data_cleared_and_reinitialized', 0);
+      return true;
+    } catch (error) {
+      console.error('Error clearing data:', error);
       return false;
     }
   }
@@ -309,24 +365,5 @@ export class SecureDataService {
   private static calculateChecksum(employees: Employee[], records: AttendanceRecord[]): string {
     const combined = JSON.stringify(employees) + JSON.stringify(records);
     return btoa(combined).slice(0, 16); // Simple checksum
-  }
-
-  static clearAllData(): boolean {
-    if (!AuthService.isAuthenticated()) {
-      throw new Error('Authentication required for data operations');
-    }
-
-    try {
-      localStorage.removeItem(this.EMPLOYEE_DATA_KEY);
-      localStorage.removeItem(this.ATTENDANCE_DATA_KEY);
-      localStorage.removeItem('employeeData'); // Remove legacy data
-      localStorage.removeItem('attendanceRecords'); // Remove legacy data
-      
-      this.logDataOperation('data_cleared', 0);
-      return true;
-    } catch (error) {
-      console.error('Error clearing data:', error);
-      return false;
-    }
   }
 }

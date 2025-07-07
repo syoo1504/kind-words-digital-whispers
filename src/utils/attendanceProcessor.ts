@@ -25,8 +25,8 @@ export const processAttendanceScan = (qrData: string): ScanResult => {
       };
     }
 
-    // Check if employee is active
-    if (employee.status !== 'active') {
+    // Check if employee is active (case insensitive)
+    if (employee.status.toLowerCase() !== 'active') {
       return {
         success: false,
         message: "Employee account is not active. Please contact administrator."
