@@ -12,7 +12,6 @@ import { Users, Calendar, Clock, BarChart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminLogout from '@/components/AdminLogout';
 import EmployeeManagement from '@/components/EmployeeManagement';
-import EmployeeMasterlist from '@/components/EmployeeMasterlist';
 import DepartmentAnalytics from '@/components/DepartmentAnalytics';
 import ExportReports from '@/components/ExportReports';
 import BackupSync from '@/components/BackupSync';
@@ -182,10 +181,9 @@ const AdminDashboard = () => {
 
         {/* Tabs */}
         <Tabs defaultValue="attendance" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="attendance">Attendance Records</TabsTrigger>
             <TabsTrigger value="employees">Employee Management</TabsTrigger>
-            <TabsTrigger value="masterlist">Employee Masterlist</TabsTrigger>
             <TabsTrigger value="analytics">Department Analytics</TabsTrigger>
             <TabsTrigger value="reports">Export Reports</TabsTrigger>
             <TabsTrigger value="backup">Backup & Sync</TabsTrigger>
@@ -308,11 +306,6 @@ const AdminDashboard = () => {
           {/* Employee Management Tab */}
           <TabsContent value="employees">
             <EmployeeManagement />
-          </TabsContent>
-
-          {/* Employee Masterlist Tab */}
-          <TabsContent value="masterlist">
-            <EmployeeMasterlist />
           </TabsContent>
 
           {/* Department Analytics Tab */}

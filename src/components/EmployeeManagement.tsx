@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,10 +10,12 @@ import { toast } from '@/components/ui/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { SecureDataService } from '@/services/secureDataService';
 import { Employee } from '@/types/attendance';
-import { Pencil, Trash2, Plus } from 'lucide-react';
+import { Pencil, Trash2, Plus, Search } from 'lucide-react';
 
 const EmployeeManagement: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
@@ -32,10 +33,30 @@ const EmployeeManagement: React.FC = () => {
     loadEmployees();
   }, []);
 
+  useEffect(() => {
+    filterEmployees();
+  }, [employees, searchTerm]);
+
   const loadEmployees = () => {
     const employeeData = SecureDataService.getEmployeeData();
     console.log('Loaded employees:', employeeData);
     setEmployees(employeeData);
+  };
+
+  const filterEmployees = () => {
+    if (!searchTerm) {
+      setFilteredEmployees(employees);
+      return;
+    }
+
+    const filtered = employees.filter(employee =>
+      employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.employee_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.designation.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setFilteredEmployees(filtered);
   };
 
   const resetForm = () => {
@@ -233,6 +254,17 @@ const EmployeeManagement: React.FC = () => {
             </DialogContent>
           </Dialog>
         </div>
+        
+        {/* Search Filter */}
+        <div className="flex items-center space-x-2 mt-4">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search employees by name, ID, email, department, or designation..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="max-w-md"
+          />
+        </div>
       </CardHeader>
       <CardContent>
         <Table>
@@ -247,7 +279,7 @@ const EmployeeManagement: React.FC = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {employees.map((employee) => (
+            {filteredEmployees.map((employee) => (
               <TableRow key={employee.employee_id}>
                 <TableCell className="font-medium">{employee.employee_id}</TableCell>
                 <TableCell>{employee.name}</TableCell>
@@ -290,6 +322,12 @@ const EmployeeManagement: React.FC = () => {
             ))}
           </TableBody>
         </Table>
+
+        {filteredEmployees.length === 0 && searchTerm && (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No employees found matching "{searchTerm}"</p>
+          </div>
+        )}
 
         {/* Edit Employee Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
