@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -108,10 +107,10 @@ const AdminDashboard = () => {
             <div className="flex items-center space-x-4">
               <img 
                 src="https://jkseng.com/images/jks_logo_complete.svg" 
-                alt="AttendEase Logo" 
+                alt="Admin Dashboard Logo" 
                 className="h-10 w-auto"
               />
-              <h1 className="text-2xl font-bold text-gray-800">AttendEase Admin</h1>
+              <h1 className="text-2xl font-bold text-gray-800">Admin Dashboard</h1>
             </div>
             
             <nav className="flex items-center space-x-4">
