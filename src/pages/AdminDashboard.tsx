@@ -193,7 +193,7 @@ const AdminDashboard = () => {
 
         {/* Tabs */}
         <Tabs defaultValue="attendance" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="attendance">Attendance Records</TabsTrigger>
             <TabsTrigger value="employees">Employee Management</TabsTrigger>
             <TabsTrigger value="analytics">Department Analytics</TabsTrigger>
