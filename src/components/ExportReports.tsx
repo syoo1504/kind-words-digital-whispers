@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -129,16 +128,16 @@ const ExportReports = () => {
 
     const csvContent = [
       [
-        'Employee ID', 'Employee Name', 'Department', 'Total Days', 'Late Days', 
-        'Punctuality Rate (%)', 'Total Late Duration', 'Avg Late Duration', 
-        'Total Working Hours', 'Avg Working Hours/Day'
+        'employee_id', 'employee_name', 'department', 'attendance_date', 'check_in_time', 
+        'check_out_time', 'is_late', 'late_duration_minutes', 'overtime_hours', 
+        'status', 'created_at'
       ],
       ...reportData.map(row => [
         row.employeeId, row.employeeName, row.department, row.totalDays, 
         row.lateDays, row.punctualityRate, 
         formatLateDurationForExport(row.totalLateHours, row.totalLateMinutesRemainder),
         formatLateDurationForExport(row.avgLateHours, row.avgLateMinutes),
-        row.totalWorkingHours, row.avgWorkingHoursPerDay
+        row.totalWorkingHours, row.avgWorkingHoursPerDay, 'Active'
       ])
     ].map(row => row.join(',')).join('\n');
 
@@ -150,8 +149,9 @@ const ExportReports = () => {
     
     const csvContent = [
       [
-        'Date', 'Employee ID', 'Employee Name', 'Department', 'Check In', 
-        'Check Out', 'Late', 'Late Duration', 'Working Hours', 'Overtime Hours'
+        'employee_id', 'employee_name', 'qr_data', 'check_in_time', 
+        'check_out_time', 'is_late', 'late_duration_minutes', 'overtime_hours', 
+        'attendance_date', 'status', 'created_at'
       ],
       ...filtered.map(record => {
         const employee = employees.find(emp => emp.employee_id === record.employeeId);
@@ -166,16 +166,17 @@ const ExportReports = () => {
         }
 
         return [
-          new Date(record.timestamp).toLocaleDateString(),
           record.employeeId,
           record.employeeName,
-          employee?.department || 'N/A',
+          record.qrData || 'N/A',
           record.checkInTime || 'N/A',
           record.checkOutTime || 'N/A',
-          record.isLate ? 'Yes' : 'No',
-          formatLateDurationForExport(lateDuration.hours, lateDuration.minutes),
-          workingHours,
-          record.overtimeHours || 0
+          record.isLate ? 'true' : 'false',
+          lateDuration.totalMinutes,
+          record.overtimeHours || 0,
+          new Date(record.timestamp).toLocaleDateString(),
+          record.status,
+          new Date(record.timestamp).toISOString()
         ];
       })
     ].map(row => row.join(',')).join('\n');
