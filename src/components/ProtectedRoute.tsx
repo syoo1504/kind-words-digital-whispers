@@ -46,7 +46,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAuth =
     checkAuthentication();
 
     // Listen for auth state changes
-    const { unsubscribe } = SupabaseAuthService.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = SupabaseAuthService.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         setIsAuthenticated(false);
         if (requireAuth) {
@@ -58,7 +58,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAuth =
     });
 
     return () => {
-      unsubscribe();
+      subscription.unsubscribe();
     };
   }, [navigate, requireAuth]);
 

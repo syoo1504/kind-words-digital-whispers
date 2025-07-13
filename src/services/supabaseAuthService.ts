@@ -4,50 +4,43 @@ import { toast } from '@/components/ui/use-toast';
 
 export class SupabaseAuthService {
   
-  // Admin login with Supabase Auth
+  // Admin login with Supabase Auth using admins table
   static async adminLogin(email: string, password: string): Promise<boolean> {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // First check if admin exists in admins table
+      const { data: adminData, error: adminError } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('username', email)
+        .eq('password', password) // In production, use proper password hashing
+        .single();
 
-      if (error) {
-        console.error('Admin login error:', error);
+      if (adminError || !adminData) {
         toast({
           title: "Login Failed",
-          description: error.message,
+          description: "Invalid username or password.",
           variant: "destructive",
         });
         return false;
       }
 
-      if (data.user) {
-        // Check if user has admin role
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
+      // Create a session by signing in with email/password
+      // For now, we'll use a simple session management
+      // In production, you'd want to implement proper JWT tokens
+      const sessionData = {
+        adminId: adminData.id,
+        username: adminData.username,
+        loginTime: Date.now()
+      };
+      
+      localStorage.setItem('admin_session', JSON.stringify(sessionData));
 
-        if (profileError || !profile || profile.role !== 'admin') {
-          await supabase.auth.signOut();
-          toast({
-            title: "Access Denied",
-            description: "You don't have admin privileges.",
-            variant: "destructive",
-          });
-          return false;
-        }
+      toast({
+        title: "Login Successful",
+        description: "Welcome to Admin Dashboard",
+      });
+      return true;
 
-        toast({
-          title: "Login Successful",
-          description: "Welcome to Admin Dashboard",
-        });
-        return true;
-      }
-
-      return false;
     } catch (error) {
       console.error('Admin login error:', error);
       toast({
@@ -59,22 +52,32 @@ export class SupabaseAuthService {
     }
   }
 
-  // Check if user is authenticated and is admin
+  // Check if admin is authenticated
   static async isAdminAuthenticated(): Promise<boolean> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const adminSession = localStorage.getItem('admin_session');
       
-      if (!session?.user) {
+      if (!adminSession) {
         return false;
       }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
+      const session = JSON.parse(adminSession);
+      const sessionAge = Date.now() - session.loginTime;
+      
+      // Session expires after 8 hours
+      if (sessionAge > 8 * 60 * 60 * 1000) {
+        localStorage.removeItem('admin_session');
+        return false;
+      }
+
+      // Verify admin still exists in database
+      const { data: adminData, error } = await supabase
+        .from('admins')
+        .select('id')
+        .eq('id', session.adminId)
         .single();
 
-      return profile?.role === 'admin';
+      return !error && !!adminData;
     } catch (error) {
       console.error('Auth check error:', error);
       return false;
@@ -84,7 +87,7 @@ export class SupabaseAuthService {
   // Admin logout
   static async adminLogout(): Promise<void> {
     try {
-      await supabase.auth.signOut();
+      localStorage.removeItem('admin_session');
       toast({
         title: "Logged Out",
         description: "You have been logged out successfully.",
@@ -94,14 +97,19 @@ export class SupabaseAuthService {
     }
   }
 
-  // Get current user session
+  // Get current admin session
   static async getCurrentSession() {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session;
+    const adminSession = localStorage.getItem('admin_session');
+    return adminSession ? JSON.parse(adminSession) : null;
   }
 
-  // Listen to auth changes
+  // Mock auth state change listener for compatibility
   static onAuthStateChange(callback: (event: string, session: any) => void) {
-    return supabase.auth.onAuthStateChange(callback);
+    // For compatibility with existing code, return mock subscription
+    const subscription = {
+      unsubscribe: () => {}
+    };
+    
+    return { data: { subscription } };
   }
 }
