@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { SecureDataService } from '@/services/secureDataService';
+import { SupabaseEmployeeService } from '@/services/supabaseEmployeeService';
+import { SupabaseDataMigration } from '@/services/supabaseDataMigration';
 import { Employee } from '@/types/attendance';
-import { Pencil, Trash2, Plus, Search } from 'lucide-react';
+import { Pencil, Trash2, Plus, Search, Upload, RefreshCw } from 'lucide-react';
 
 const EmployeeManagement: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -19,6 +20,8 @@ const EmployeeManagement: React.FC = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [migrating, setMigrating] = useState(false);
   const [formData, setFormData] = useState<Employee>({
     employee_id: '',
     name: '',
@@ -37,10 +40,22 @@ const EmployeeManagement: React.FC = () => {
     filterEmployees();
   }, [employees, searchTerm]);
 
-  const loadEmployees = () => {
-    const employeeData = SecureDataService.getEmployeeData();
-    console.log('Loaded employees:', employeeData);
-    setEmployees(employeeData);
+  const loadEmployees = async () => {
+    setLoading(true);
+    try {
+      const employeeData = await SupabaseEmployeeService.getEmployees();
+      console.log('Loaded employees from Supabase:', employeeData);
+      setEmployees(employeeData);
+    } catch (error) {
+      console.error('Error loading employees:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load employees from database.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filterEmployees = () => {
@@ -71,7 +86,7 @@ const EmployeeManagement: React.FC = () => {
     });
   };
 
-  const handleAddEmployee = () => {
+  const handleAddEmployee = async () => {
     if (!formData.employee_id || !formData.name) {
       toast({
         title: "Validation Error",
@@ -81,25 +96,15 @@ const EmployeeManagement: React.FC = () => {
       return;
     }
 
-    const success = SecureDataService.addEmployee(formData);
+    const success = await SupabaseEmployeeService.addEmployee(formData);
     if (success) {
-      toast({
-        title: "Success",
-        description: "Employee added successfully",
-      });
-      loadEmployees();
+      await loadEmployees();
       resetForm();
       setIsAddDialogOpen(false);
-    } else {
-      toast({
-        title: "Error",
-        description: "Failed to add employee. Employee ID may already exist.",
-        variant: "destructive",
-      });
     }
   };
 
-  const handleEditEmployee = () => {
+  const handleEditEmployee = async () => {
     if (!currentEmployee || !formData.employee_id || !formData.name) {
       toast({
         title: "Validation Error",
@@ -109,39 +114,45 @@ const EmployeeManagement: React.FC = () => {
       return;
     }
 
-    const success = SecureDataService.updateEmployee(currentEmployee.employee_id, formData);
+    const success = await SupabaseEmployeeService.updateEmployee(currentEmployee.employee_id, formData);
     if (success) {
-      toast({
-        title: "Success",
-        description: "Employee updated successfully",
-      });
-      loadEmployees();
+      await loadEmployees();
       resetForm();
       setIsEditDialogOpen(false);
       setCurrentEmployee(null);
-    } else {
-      toast({
-        title: "Error",
-        description: "Failed to update employee. Employee ID may already exist.",
-        variant: "destructive",
-      });
     }
   };
 
-  const handleDeleteEmployee = (employeeId: string) => {
-    const success = SecureDataService.deleteEmployee(employeeId);
+  const handleDeleteEmployee = async (employeeId: string) => {
+    const success = await SupabaseEmployeeService.deleteEmployee(employeeId);
     if (success) {
-      toast({
-        title: "Success",
-        description: "Employee deleted successfully",
-      });
-      loadEmployees();
-    } else {
-      toast({
-        title: "Error",
-        description: "Failed to delete employee",
-        variant: "destructive",
-      });
+      await loadEmployees();
+    }
+  };
+
+  const handleMigrateData = async () => {
+    setMigrating(true);
+    try {
+      const success = await SupabaseDataMigration.performFullMigration();
+      if (success) {
+        await loadEmployees(); // Refresh the list after migration
+      }
+    } catch (error) {
+      console.error('Migration error:', error);
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  const handleSyncData = async () => {
+    setLoading(true);
+    try {
+      await SupabaseDataMigration.syncWithSupabase();
+      await loadEmployees();
+    } catch (error) {
+      console.error('Sync error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -162,100 +173,109 @@ const EmployeeManagement: React.FC = () => {
           <div>
             <CardTitle>Employee Management</CardTitle>
             <CardDescription>
-              Manage employee records - add, edit, and delete employees
+              Manage employee records using Supabase database - add, edit, and delete employees
             </CardDescription>
           </div>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={resetForm}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Employee
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Employee</DialogTitle>
-                <DialogDescription>
-                  Enter the employee details below.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="emp-id" className="text-right">ID</Label>
-                  <Input
-                    id="emp-id"
-                    value={formData.employee_id}
-                    onChange={(e) => handleInputChange('employee_id', e.target.value)}
-                    className="col-span-3"
-                  />
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleMigrateData} disabled={migrating}>
+              <Upload className="h-4 w-4 mr-2" />
+              {migrating ? 'Migrating...' : 'Migrate from Local'}
+            </Button>
+            <Button variant="outline" onClick={handleSyncData} disabled={loading}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Sync Data
+            </Button>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={resetForm}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Employee
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Employee</DialogTitle>
+                  <DialogDescription>
+                    Enter the employee details below.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="emp-id" className="text-right">ID</Label>
+                    <Input
+                      id="emp-id"
+                      value={formData.employee_id}
+                      onChange={(e) => handleInputChange('employee_id', e.target.value)}
+                      className="col-span-3"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="name" className="text-right">Name</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      className="col-span-3"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="email" className="text-right">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      className="col-span-3"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="phone" className="text-right">Phone</Label>
+                    <Input
+                      id="phone"
+                      value={formData.phone}
+                      onChange={(e) => handleInputChange('phone', e.target.value)}
+                      className="col-span-3"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="department" className="text-right">Department</Label>
+                    <Input
+                      id="department"
+                      value={formData.department}
+                      onChange={(e) => handleInputChange('department', e.target.value)}
+                      className="col-span-3"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="designation" className="text-right">Designation</Label>
+                    <Input
+                      id="designation"
+                      value={formData.designation}
+                      onChange={(e) => handleInputChange('designation', e.target.value)}
+                      className="col-span-3"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="status" className="text-right">Status</Label>
+                    <Select value={formData.status} onValueChange={(value) => handleInputChange('status', value)}>
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="name" className="text-right">Name</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => handleInputChange('name', e.target.value)}
-                    className="col-span-3"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="email" className="text-right">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    className="col-span-3"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="phone" className="text-right">Phone</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                    className="col-span-3"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="department" className="text-right">Department</Label>
-                  <Input
-                    id="department"
-                    value={formData.department}
-                    onChange={(e) => handleInputChange('department', e.target.value)}
-                    className="col-span-3"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="designation" className="text-right">Designation</Label>
-                  <Input
-                    id="designation"
-                    value={formData.designation}
-                    onChange={(e) => handleInputChange('designation', e.target.value)}
-                    className="col-span-3"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="status" className="text-right">Status</Label>
-                  <Select value={formData.status} onValueChange={(value) => handleInputChange('status', value)}>
-                    <SelectTrigger className="col-span-3">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Active">Active</SelectItem>
-                      <SelectItem value="Inactive">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button onClick={handleAddEmployee}>Add Employee</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter>
+                  <Button onClick={handleAddEmployee}>Add Employee</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
         
-        {/* Search Filter */}
         <div className="flex items-center space-x-2 mt-4">
           <Search className="h-4 w-4 text-muted-foreground" />
           <Input
@@ -267,63 +287,72 @@ const EmployeeManagement: React.FC = () => {
         </div>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Employee ID</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredEmployees.map((employee) => (
-              <TableRow key={employee.employee_id}>
-                <TableCell className="font-medium">{employee.employee_id}</TableCell>
-                <TableCell>{employee.name}</TableCell>
-                <TableCell>{employee.email}</TableCell>
-                <TableCell>{employee.department}</TableCell>
-                <TableCell>{employee.status}</TableCell>
-                <TableCell>
-                  <div className="flex space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEditDialog(employee)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete the employee record for {employee.name}.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDeleteEmployee(employee.employee_id)}>
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        {loading && (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-2 text-gray-600">Loading employees...</p>
+          </div>
+        )}
 
-        {filteredEmployees.length === 0 && searchTerm && (
+        {!loading && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee ID</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Department</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredEmployees.map((employee) => (
+                <TableRow key={employee.employee_id}>
+                  <TableCell className="font-medium">{employee.employee_id}</TableCell>
+                  <TableCell>{employee.name}</TableCell>
+                  <TableCell>{employee.email}</TableCell>
+                  <TableCell>{employee.department}</TableCell>
+                  <TableCell>{employee.status}</TableCell>
+                  <TableCell>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditDialog(employee)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This action cannot be undone. This will permanently delete the employee record for {employee.name}.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteEmployee(employee.employee_id)}>
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        {filteredEmployees.length === 0 && searchTerm && !loading && (
           <div className="text-center py-8">
             <p className="text-gray-500">No employees found matching "{searchTerm}"</p>
           </div>

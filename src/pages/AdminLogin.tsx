@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/components/ui/use-toast';
-import { AuthService } from '@/utils/auth';
+import { SupabaseAuthService } from '@/services/supabaseAuthService';
 import { InputValidator } from '@/utils/inputValidation';
 
 const AdminLogin = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -20,11 +20,11 @@ const AdminLogin = () => {
 
     try {
       // Sanitize inputs
-      const sanitizedUsername = InputValidator.sanitizeString(username);
+      const sanitizedEmail = InputValidator.sanitizeString(email);
       const sanitizedPassword = InputValidator.sanitizeString(password);
 
       // Validate inputs
-      if (!sanitizedUsername || !sanitizedPassword) {
+      if (!sanitizedEmail || !sanitizedPassword) {
         toast({
           title: "Invalid Input",
           description: "Please enter valid credentials",
@@ -33,21 +33,21 @@ const AdminLogin = () => {
         return;
       }
 
-      // Attempt authentication
-      const isAuthenticated = await AuthService.login(sanitizedUsername, sanitizedPassword);
-
-      if (isAuthenticated) {
+      // Validate email format
+      if (!InputValidator.validateEmail(sanitizedEmail)) {
         toast({
-          title: "Login Successful",
-          description: "Welcome to Admin Dashboard",
-        });
-        navigate('/admin');
-      } else {
-        toast({
-          title: "Login Failed",
-          description: "Invalid username or password",
+          title: "Invalid Email",
+          description: "Please enter a valid email address",
           variant: "destructive",
         });
+        return;
+      }
+
+      // Attempt authentication with Supabase
+      const isAuthenticated = await SupabaseAuthService.adminLogin(sanitizedEmail, sanitizedPassword);
+
+      if (isAuthenticated) {
+        navigate('/admin');
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -72,18 +72,18 @@ const AdminLogin = () => {
           />
           <CardTitle className="text-2xl">Admin Login</CardTitle>
           <CardDescription>
-            Enter your credentials to access the admin dashboard
+            Enter your email and password to access the admin dashboard
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <Input
-                type="text"
-                placeholder="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                maxLength={50}
+                type="email"
+                placeholder="Email Address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                maxLength={100}
                 required
               />
             </div>
@@ -114,8 +114,11 @@ const AdminLogin = () => {
 
           <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm">
             <p className="font-medium">Demo Credentials:</p>
-            <p>Username: admin</p>
+            <p>Email: admin@company.com</p>
             <p>Password: admin123</p>
+            <p className="text-xs text-gray-500 mt-2">
+              Note: You need to create an admin user in Supabase first
+            </p>
           </div>
         </CardContent>
       </Card>

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/components/ui/use-toast';
 import { InputValidator } from '@/utils/inputValidation';
-import { SecureDataService } from '@/services/secureDataService';
+import { SupabaseEmployeeService } from '@/services/supabaseEmployeeService';
 
 const EmployeeLogin = () => {
   const [employeeId, setEmployeeId] = useState('');
@@ -31,14 +31,13 @@ const EmployeeLogin = () => {
         return;
       }
 
-      // Get employees directly from SecureDataService for data consistency
-      const employees = SecureDataService.getEmployeeData();
-      console.log('Available employees for login:', employees.map(emp => emp.employee_id));
-      console.log('Looking for employee ID:', sanitizedEmployeeId);
+      // Use Supabase employee authentication
+      const { success, employee } = await SupabaseEmployeeService.authenticateEmployee(
+        sanitizedEmployeeId, 
+        sanitizedPassword
+      );
       
-      const employee = employees.find(emp => emp.employee_id === sanitizedEmployeeId);
-      
-      if (employee && (employee.status === 'Active' || employee.status === 'active') && sanitizedPassword === 'emp123') {
+      if (success && employee) {
         localStorage.setItem('employee_session', JSON.stringify({
           employeeId: sanitizedEmployeeId,
           employeeName: employee.name,
@@ -50,16 +49,10 @@ const EmployeeLogin = () => {
           description: `Welcome ${employee.name}`,
         });
         navigate('/employee/scan');
-      } else if (employee && employee.status !== 'Active' && employee.status !== 'active') {
-        toast({
-          title: "Login Failed",
-          description: "Employee account is inactive. Please contact administrator.",
-          variant: "destructive",
-        });
       } else {
         toast({
           title: "Login Failed",
-          description: "Invalid Employee ID or password",
+          description: "Invalid Employee ID or password, or employee account is inactive.",
           variant: "destructive",
         });
       }
@@ -128,8 +121,11 @@ const EmployeeLogin = () => {
 
           <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm">
             <p className="font-medium">Demo Credentials:</p>
-            <p>Employee ID: Any valid employee ID</p>
+            <p>Employee ID: Any valid employee ID from database</p>
             <p>Password: emp123</p>
+            <p className="text-xs text-gray-500 mt-2">
+              Data is now stored in Supabase database
+            </p>
           </div>
         </CardContent>
       </Card>
