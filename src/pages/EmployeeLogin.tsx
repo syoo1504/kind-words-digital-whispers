@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/components/ui/use-toast';
 import { InputValidator } from '@/utils/inputValidation';
-import { SupabaseEmployeeService } from '@/services/supabaseEmployeeService';
 
 const EmployeeLogin = () => {
   const [employeeId, setEmployeeId] = useState('');
@@ -31,28 +30,23 @@ const EmployeeLogin = () => {
         return;
       }
 
-      // Use Supabase employee authentication
-      const { success, employee } = await SupabaseEmployeeService.authenticateEmployee(
-        sanitizedEmployeeId, 
-        sanitizedPassword
-      );
-      
-      if (success && employee) {
+      // Simple demo authentication - any employee ID with password "emp123"
+      if (sanitizedPassword === 'emp123') {
         localStorage.setItem('employee_session', JSON.stringify({
           employeeId: sanitizedEmployeeId,
-          employeeName: employee.name,
+          employeeName: `Employee ${sanitizedEmployeeId}`,
           loginTime: Date.now()
         }));
         
         toast({
           title: "Login Successful",
-          description: `Welcome ${employee.name}`,
+          description: `Welcome Employee ${sanitizedEmployeeId}`,
         });
         navigate('/employee/scan');
       } else {
         toast({
           title: "Login Failed",
-          description: "Invalid Employee ID or password, or employee account is inactive.",
+          description: "Invalid Employee ID or password.",
           variant: "destructive",
         });
       }
@@ -121,10 +115,10 @@ const EmployeeLogin = () => {
 
           <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm">
             <p className="font-medium">Demo Credentials:</p>
-            <p>Employee ID: Any valid employee ID from database</p>
+            <p>Employee ID: Any employee ID you want</p>
             <p>Password: emp123</p>
             <p className="text-xs text-gray-500 mt-2">
-              Data is now stored in Supabase database
+              Data is stored locally in your browser
             </p>
           </div>
         </CardContent>

@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SupabaseAuthService } from '@/services/supabaseAuthService';
+import { AuthService } from '@/utils/auth';
 import { toast } from '@/components/ui/use-toast';
 
 interface ProtectedRouteProps {
@@ -15,7 +15,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAuth =
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuthentication = async () => {
+    const checkAuthentication = () => {
       if (!requireAuth) {
         setIsAuthenticated(true);
         setLoading(false);
@@ -23,7 +23,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAuth =
       }
 
       try {
-        const authenticated = await SupabaseAuthService.isAdminAuthenticated();
+        const authenticated = AuthService.isAuthenticated();
         setIsAuthenticated(authenticated);
         
         if (!authenticated) {
@@ -44,22 +44,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAuth =
     };
 
     checkAuthentication();
-
-    // Listen for auth state changes
-    const { data: { subscription } } = SupabaseAuthService.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        setIsAuthenticated(false);
-        if (requireAuth) {
-          navigate('/admin-login');
-        }
-      } else if (event === 'SIGNED_IN' && session) {
-        checkAuthentication(); // Re-check admin role
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, [navigate, requireAuth]);
 
   if (loading) {

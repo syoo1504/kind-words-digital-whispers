@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,10 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { SupabaseEmployeeService } from '@/services/supabaseEmployeeService';
-import { SupabaseDataMigration } from '@/services/supabaseDataMigration';
 import { Employee } from '@/types/attendance';
-import { Pencil, Trash2, Plus, Search, Upload, RefreshCw } from 'lucide-react';
+import { Pencil, Trash2, Plus, Search } from 'lucide-react';
 
 const EmployeeManagement: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -21,7 +20,6 @@ const EmployeeManagement: React.FC = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(false);
-  const [migrating, setMigrating] = useState(false);
   const [formData, setFormData] = useState<Employee>({
     employee_id: '',
     name: '',
@@ -40,17 +38,44 @@ const EmployeeManagement: React.FC = () => {
     filterEmployees();
   }, [employees, searchTerm]);
 
-  const loadEmployees = async () => {
+  const loadEmployees = () => {
     setLoading(true);
     try {
-      const employeeData = await SupabaseEmployeeService.getEmployees();
-      console.log('Loaded employees from Supabase:', employeeData);
-      setEmployees(employeeData);
+      const employeesData = localStorage.getItem('employees');
+      if (employeesData) {
+        const parsedEmployees = JSON.parse(employeesData);
+        console.log('Loaded employees from localStorage:', parsedEmployees);
+        setEmployees(parsedEmployees);
+      } else {
+        // Initialize with sample data if no employees exist
+        const sampleEmployees: Employee[] = [
+          {
+            employee_id: 'EMP001',
+            name: 'John Doe',
+            email: 'john.doe@company.com',
+            phone: '+1234567890',
+            department: 'Engineering',
+            designation: 'Software Developer',
+            status: 'Active'
+          },
+          {
+            employee_id: 'EMP002',
+            name: 'Jane Smith',
+            email: 'jane.smith@company.com',
+            phone: '+1234567891',
+            department: 'HR',
+            designation: 'HR Manager',
+            status: 'Active'
+          }
+        ];
+        localStorage.setItem('employees', JSON.stringify(sampleEmployees));
+        setEmployees(sampleEmployees);
+      }
     } catch (error) {
       console.error('Error loading employees:', error);
       toast({
         title: "Error",
-        description: "Failed to load employees from database.",
+        description: "Failed to load employees from local storage.",
         variant: "destructive",
       });
     } finally {
@@ -86,7 +111,7 @@ const EmployeeManagement: React.FC = () => {
     });
   };
 
-  const handleAddEmployee = async () => {
+  const handleAddEmployee = () => {
     if (!formData.employee_id || !formData.name) {
       toast({
         title: "Validation Error",
@@ -96,15 +121,29 @@ const EmployeeManagement: React.FC = () => {
       return;
     }
 
-    const success = await SupabaseEmployeeService.addEmployee(formData);
-    if (success) {
-      await loadEmployees();
-      resetForm();
-      setIsAddDialogOpen(false);
+    // Check if employee ID already exists
+    if (employees.some(emp => emp.employee_id === formData.employee_id)) {
+      toast({
+        title: "Duplicate Employee ID",
+        description: "An employee with this ID already exists",
+        variant: "destructive",
+      });
+      return;
     }
+
+    const updatedEmployees = [...employees, formData];
+    localStorage.setItem('employees', JSON.stringify(updatedEmployees));
+    setEmployees(updatedEmployees);
+    resetForm();
+    setIsAddDialogOpen(false);
+    
+    toast({
+      title: "Employee Added",
+      description: `${formData.name} has been added successfully`,
+    });
   };
 
-  const handleEditEmployee = async () => {
+  const handleEditEmployee = () => {
     if (!currentEmployee || !formData.employee_id || !formData.name) {
       toast({
         title: "Validation Error",
@@ -114,46 +153,30 @@ const EmployeeManagement: React.FC = () => {
       return;
     }
 
-    const success = await SupabaseEmployeeService.updateEmployee(currentEmployee.employee_id, formData);
-    if (success) {
-      await loadEmployees();
-      resetForm();
-      setIsEditDialogOpen(false);
-      setCurrentEmployee(null);
-    }
+    const updatedEmployees = employees.map(emp => 
+      emp.employee_id === currentEmployee.employee_id ? formData : emp
+    );
+    localStorage.setItem('employees', JSON.stringify(updatedEmployees));
+    setEmployees(updatedEmployees);
+    resetForm();
+    setIsEditDialogOpen(false);
+    setCurrentEmployee(null);
+    
+    toast({
+      title: "Employee Updated",
+      description: `${formData.name} has been updated successfully`,
+    });
   };
 
-  const handleDeleteEmployee = async (employeeId: string) => {
-    const success = await SupabaseEmployeeService.deleteEmployee(employeeId);
-    if (success) {
-      await loadEmployees();
-    }
-  };
-
-  const handleMigrateData = async () => {
-    setMigrating(true);
-    try {
-      const success = await SupabaseDataMigration.performFullMigration();
-      if (success) {
-        await loadEmployees(); // Refresh the list after migration
-      }
-    } catch (error) {
-      console.error('Migration error:', error);
-    } finally {
-      setMigrating(false);
-    }
-  };
-
-  const handleSyncData = async () => {
-    setLoading(true);
-    try {
-      await SupabaseDataMigration.syncWithSupabase();
-      await loadEmployees();
-    } catch (error) {
-      console.error('Sync error:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handleDeleteEmployee = (employeeId: string) => {
+    const updatedEmployees = employees.filter(emp => emp.employee_id !== employeeId);
+    localStorage.setItem('employees', JSON.stringify(updatedEmployees));
+    setEmployees(updatedEmployees);
+    
+    toast({
+      title: "Employee Deleted",
+      description: "Employee has been deleted successfully",
+    });
   };
 
   const openEditDialog = (employee: Employee) => {
@@ -173,18 +196,10 @@ const EmployeeManagement: React.FC = () => {
           <div>
             <CardTitle>Employee Management</CardTitle>
             <CardDescription>
-              Manage employee records using Supabase database - add, edit, and delete employees
+              Manage employee records - add, edit, and delete employees
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleMigrateData} disabled={migrating}>
-              <Upload className="h-4 w-4 mr-2" />
-              {migrating ? 'Migrating...' : 'Migrate from Local'}
-            </Button>
-            <Button variant="outline" onClick={handleSyncData} disabled={loading}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Sync Data
-            </Button>
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={resetForm}>
