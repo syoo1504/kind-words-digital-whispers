@@ -58,88 +58,93 @@ const ExportReports = () => {
     return filtered;
   };
 
-  const calculateLateDuration = (checkInTime: string) => {
-    if (!checkInTime) return { hours: 0, minutes: 0, totalMinutes: 0 };
+  const formatTimeForExport = (timeString?: string) => {
+    if (!timeString) return '';
+    // Ensure time format is HH:MM:SS
+    if (timeString.length === 5) {
+      return timeString + ':00';
+    }
+    return timeString;
+  };
+
+  const formatDateTimeForExport = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  };
+
+  const formatDateForExport = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
+  };
+
+  const calculateLateDurationMinutes = (checkInTime: string) => {
+    if (!checkInTime) return 0;
     
     const checkIn = new Date(`1970-01-01T${checkInTime}`);
     const workStart = new Date(`1970-01-01T09:00:00`);
     
-    if (checkIn <= workStart) return { hours: 0, minutes: 0, totalMinutes: 0 };
+    if (checkIn <= workStart) return 0;
     
     const diffMs = checkIn.getTime() - workStart.getTime();
-    const totalMinutes = Math.round(diffMs / (1000 * 60));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    
-    return { hours, minutes, totalMinutes };
+    return Math.round(diffMs / (1000 * 60));
   };
 
-  const formatLateDurationForExport = (hours: number, minutes: number) => {
-    if (hours === 0 && minutes === 0) return '0h 0m';
-    if (hours === 0) return `0h ${minutes}m`;
-    if (minutes === 0) return `${hours}h 0m`;
-    return `${hours}h ${minutes}m`;
+  const calculateOvertimeHours = (checkInTime?: string, checkOutTime?: string) => {
+    if (!checkInTime || !checkOutTime) return 0;
+    
+    const checkIn = new Date(`1970-01-01T${checkInTime}`);
+    const checkOut = new Date(`1970-01-01T${checkOutTime}`);
+    const workEnd = new Date(`1970-01-01T17:00:00`);
+    
+    if (checkOut <= workEnd) return 0;
+    
+    const overtimeMs = checkOut.getTime() - workEnd.getTime();
+    const overtimeHours = overtimeMs / (1000 * 60 * 60);
+    
+    return Math.round(overtimeHours * 100) / 100; // Round to 2 decimal places
   };
 
   const exportSummaryReport = () => {
     const filtered = getFilteredRecords();
-    const employeeIds = selectedEmployee === 'all' 
-      ? [...new Set(filtered.map(r => r.employeeId))]
-      : [selectedEmployee];
-
-    const reportData = employeeIds.map(empId => {
-      const employee = employees.find(emp => emp.employee_id === empId);
-      const empRecords = filtered.filter(r => r.employeeId === empId);
-      
-      const totalDays = empRecords.length;
-      const lateDays = empRecords.filter(r => r.isLate).length;
-      const totalLateMinutes = empRecords
-        .filter(r => r.isLate && r.checkInTime)
-        .reduce((sum, r) => sum + calculateLateDuration(r.checkInTime!).totalMinutes, 0);
-      
-      const workingHours = empRecords.reduce((sum, record) => {
-        if (record.checkInTime && record.checkOutTime) {
-          const checkIn = new Date(`1970-01-01T${record.checkInTime}`);
-          const checkOut = new Date(`1970-01-01T${record.checkOutTime}`);
-          const diff = checkOut.getTime() - checkIn.getTime();
-          return sum + (diff / (1000 * 60 * 60)); // Convert to hours
-        }
-        return sum;
-      }, 0);
-
-      const avgLateHours = lateDays > 0 ? Math.floor(totalLateMinutes / lateDays / 60) : 0;
-      const avgLateMinutes = lateDays > 0 ? (totalLateMinutes / lateDays) % 60 : 0;
-
-      return {
-        employeeId: empId,
-        employeeName: employee?.name || 'Unknown',
-        department: employee?.department || 'N/A',
-        totalDays,
-        lateDays,
-        punctualityRate: totalDays > 0 ? Math.round(((totalDays - lateDays) / totalDays) * 100) : 100,
-        totalLateHours: Math.floor(totalLateMinutes / 60),
-        totalLateMinutesRemainder: totalLateMinutes % 60,
-        avgLateHours,
-        avgLateMinutes: Math.round(avgLateMinutes),
-        totalWorkingHours: Math.round(workingHours * 100) / 100,
-        avgWorkingHoursPerDay: totalDays > 0 ? Math.round((workingHours / totalDays) * 100) / 100 : 0
-      };
-    });
-
+    
+    // Create CSV content with exact column structure
     const csvContent = [
-      [
-        'employee_id', 'employee_name', 'department', 'attendance_date', 'check_in_time', 
-        'check_out_time', 'is_late', 'late_duration_minutes', 'overtime_hours', 
-        'status', 'created_at'
-      ],
-      ...reportData.map(row => [
-        row.employeeId, row.employeeName, row.department, row.totalDays, 
-        row.lateDays, row.punctualityRate, 
-        formatLateDurationForExport(row.totalLateHours, row.totalLateMinutesRemainder),
-        formatLateDurationForExport(row.avgLateHours, row.avgLateMinutes),
-        row.totalWorkingHours, row.avgWorkingHoursPerDay, 'Active'
-      ])
-    ].map(row => row.join(',')).join('\n');
+      // Header row matching the expected format
+      'employee_id,employee_name,department,attendance_date,check_in_time,check_out_time,is_late,late_duration_minutes,overtime_hours,status,created_at',
+      
+      // Data rows
+      ...filtered.map(record => {
+        const employee = employees.find(emp => emp.employee_id === record.employeeId);
+        const lateDurationMinutes = record.isLate && record.checkInTime ? 
+          calculateLateDurationMinutes(record.checkInTime) : 0;
+        const overtimeHours = calculateOvertimeHours(record.checkInTime, record.checkOutTime);
+        
+        return [
+          record.employeeId,
+          record.employeeName,
+          employee?.department || 'N/A',
+          formatDateForExport(record.timestamp),
+          formatTimeForExport(record.checkInTime),
+          formatTimeForExport(record.checkOutTime),
+          record.isLate ? 'true' : 'false',
+          lateDurationMinutes,
+          overtimeHours.toFixed(2),
+          record.status,
+          formatDateTimeForExport(record.timestamp)
+        ].join(',');
+      })
+    ].join('\n');
 
     downloadCSV(csvContent, 'attendance-summary-report');
   };
@@ -155,28 +160,22 @@ const ExportReports = () => {
       ],
       ...filtered.map(record => {
         const employee = employees.find(emp => emp.employee_id === record.employeeId);
-        const lateDuration = record.isLate && record.checkInTime ? calculateLateDuration(record.checkInTime) : { hours: 0, minutes: 0, totalMinutes: 0 };
-        
-        let workingHours = 0;
-        if (record.checkInTime && record.checkOutTime) {
-          const checkIn = new Date(`1970-01-01T${record.checkInTime}`);
-          const checkOut = new Date(`1970-01-01T${record.checkOutTime}`);
-          const diff = checkOut.getTime() - checkIn.getTime();
-          workingHours = Math.round((diff / (1000 * 60 * 60)) * 100) / 100;
-        }
+        const lateDurationMinutes = record.isLate && record.checkInTime ? 
+          calculateLateDurationMinutes(record.checkInTime) : 0;
+        const overtimeHours = calculateOvertimeHours(record.checkInTime, record.checkOutTime);
 
         return [
           record.employeeId,
           record.employeeName,
           record.qrData || 'N/A',
-          record.checkInTime || 'N/A',
-          record.checkOutTime || 'N/A',
+          formatTimeForExport(record.checkInTime),
+          formatTimeForExport(record.checkOutTime),
           record.isLate ? 'true' : 'false',
-          lateDuration.totalMinutes,
-          record.overtimeHours || 0,
-          new Date(record.timestamp).toLocaleDateString(),
+          lateDurationMinutes,
+          overtimeHours.toFixed(2),
+          formatDateForExport(record.timestamp),
           record.status,
-          new Date(record.timestamp).toISOString()
+          formatDateTimeForExport(record.timestamp)
         ];
       })
     ].map(row => row.join(',')).join('\n');
