@@ -76,6 +76,7 @@ export class SupabaseDataMigration {
       console.log('Starting attendance migration to Supabase...');
       
       const localAttendance = SecureDataService.getAttendanceRecords();
+      const localEmployees = SecureDataService.getEmployeeData();
       console.log('Found local attendance records:', localAttendance.length);
 
       if (localAttendance.length === 0) {
@@ -87,19 +88,26 @@ export class SupabaseDataMigration {
       }
 
       // Prepare attendance records for Supabase
-      const supabaseAttendance = localAttendance.map(record => ({
-        employee_id: record.employeeId,
-        employee_name: record.employeeName,
-        qr_data: record.qrData || null,
-        check_in_time: record.checkInTime || null,
-        check_out_time: record.checkOutTime || null,
-        is_late: record.isLate || false,
-        late_duration_minutes: 0,
-        overtime_hours: record.overtimeHours || 0,
-        attendance_date: record.timestamp ? new Date(record.timestamp).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        status: record.status || 'success',
-        type: record.type || 'check-in'
-      }));
+      const supabaseAttendance = localAttendance.map(record => {
+        // Find the employee to get their department
+        const employee = localEmployees.find(emp => emp.employee_id === record.employeeId);
+        const department = employee?.department || 'Unknown';
+
+        return {
+          employee_id: record.employeeId,
+          employee_name: record.employeeName,
+          department: department,
+          qr_data: record.qrData || null,
+          check_in_time: record.checkInTime || null,
+          check_out_time: record.checkOutTime || null,
+          is_late: record.isLate || false,
+          late_duration_minutes: 0,
+          overtime_hours: record.overtimeHours || 0,
+          attendance_date: record.timestamp ? new Date(record.timestamp).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          status: record.status || 'success',
+          type: record.type || 'check-in'
+        };
+      });
 
       const { data, error } = await supabase
         .from('attendance_records')
