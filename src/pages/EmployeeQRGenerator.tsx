@@ -96,6 +96,15 @@ const EmployeeQRGenerator = () => {
     }
   }, []);
 
+  // Get the current employee's full name
+  const getCurrentEmployeeName = () => {
+    if (sessionData?.employeeId) {
+      const employee = AttendanceUtils.findEmployee(sessionData.employeeId);
+      return employee?.name || sessionData.employeeName || `Employee ${sessionData.employeeId}`;
+    }
+    return '';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-300 to-gray-100">
       <EmployeePortalHeader />
@@ -148,7 +157,7 @@ const EmployeeQRGenerator = () => {
                 
                 <div className="text-sm text-gray-600">
                   <p>Employee ID: {employeeId}</p>
-                  {sessionData && <p>Name: {sessionData.employeeName}</p>}
+                  <p>Name: {getCurrentEmployeeName()}</p>
                 </div>
               </div>
             )}

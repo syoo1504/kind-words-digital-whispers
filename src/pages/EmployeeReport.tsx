@@ -8,6 +8,7 @@ import EmployeePortalFooter from '@/components/EmployeePortalFooter';
 import EmployeeNavigation from '@/components/EmployeeNavigation';
 import { AttendanceRecord } from '@/types/attendance';
 import { SecureDataService } from '@/services/secureDataService';
+import { AttendanceUtils } from '@/utils/attendanceUtils';
 
 const EmployeeReport = () => {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
@@ -71,6 +72,15 @@ const EmployeeReport = () => {
     return `${hours}h ${minutes}m`;
   };
 
+  // Get the current employee's full name
+  const getCurrentEmployeeName = () => {
+    if (currentEmployee?.employeeId) {
+      const employee = AttendanceUtils.findEmployee(currentEmployee.employeeId);
+      return employee?.name || currentEmployee.employeeName || `Employee ${currentEmployee.employeeId}`;
+    }
+    return '';
+  };
+
   // Group records by date
   const groupedRecords = attendanceRecords.reduce((groups: any, record) => {
     const date = new Date(record.timestamp).toDateString();
@@ -91,7 +101,7 @@ const EmployeeReport = () => {
           <CardHeader>
             <CardTitle className="text-2xl">My Attendance Report</CardTitle>
             <CardDescription>
-              {currentEmployee && `Viewing attendance records for ${currentEmployee.employeeName} (ID: ${currentEmployee.employeeId})`}
+              {currentEmployee && `Viewing attendance records for ${getCurrentEmployeeName()} (ID: ${currentEmployee.employeeId})`}
             </CardDescription>
           </CardHeader>
         </Card>

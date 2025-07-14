@@ -44,6 +44,7 @@ export type Database = {
           check_in_time: string | null
           check_out_time: string | null
           created_at: string | null
+          department: string
           employee_id: string
           employee_name: string
           id: string
@@ -60,6 +61,7 @@ export type Database = {
           check_in_time?: string | null
           check_out_time?: string | null
           created_at?: string | null
+          department: string
           employee_id: string
           employee_name: string
           id?: string
@@ -76,6 +78,7 @@ export type Database = {
           check_in_time?: string | null
           check_out_time?: string | null
           created_at?: string | null
+          department?: string
           employee_id?: string
           employee_name?: string
           id?: string
