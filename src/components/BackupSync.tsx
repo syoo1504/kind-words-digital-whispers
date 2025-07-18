@@ -6,12 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Download, Upload, Database, RefreshCw } from 'lucide-react';
+import { Download, Upload, Database, RefreshCw, RotateCw, Cloud } from 'lucide-react';
 import { SecureDataService } from '@/services/secureDataService';
+import { SupabaseDataMigration } from '@/services/supabaseDataMigration';
 
 const BackupSync = () => {
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const createBackup = async () => {
     setIsCreatingBackup(true);
@@ -85,6 +88,39 @@ const BackupSync = () => {
       recordCount: records.length,
       lastUpdated: new Date().toLocaleString()
     };
+  };
+
+  const handleMigrateToSupabase = async () => {
+    setIsMigrating(true);
+    try {
+      const success = await SupabaseDataMigration.performFullMigration();
+      if (success) {
+        toast({
+          title: "Migration Complete",
+          description: "All local data has been migrated to Supabase successfully.",
+        });
+      }
+    } catch (error) {
+      console.error('Migration error:', error);
+      toast({
+        title: "Migration Failed",
+        description: "Failed to migrate data to Supabase. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
+  const handleSyncFromSupabase = async () => {
+    setIsSyncing(true);
+    try {
+      await SupabaseDataMigration.syncWithSupabase();
+    } catch (error) {
+      console.error('Sync error:', error);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const clearAllData = () => {
@@ -190,6 +226,61 @@ const BackupSync = () => {
                 )}
               </Button>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Supabase Integration */}
+      <Card className="border-blue-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-blue-600">
+            <Cloud className="h-5 w-5" />
+            Supabase Integration
+          </CardTitle>
+          <CardDescription>
+            Sync your local data with Supabase database for cloud storage and backup
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Migration Section */}
+          <div className="flex items-center justify-between p-4 border rounded-lg bg-blue-50">
+            <div>
+              <h4 className="font-medium text-blue-800">Migrate to Supabase</h4>
+              <p className="text-sm text-blue-600">Upload all local data to Supabase database</p>
+            </div>
+            <Button 
+              onClick={handleMigrateToSupabase}
+              disabled={isMigrating || isSyncing}
+              className="flex items-center gap-2"
+            >
+              {isMigrating ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Database className="h-4 w-4" />
+              )}
+              {isMigrating ? 'Migrating...' : 'Migrate Data'}
+            </Button>
+          </div>
+
+          {/* Sync Section */}
+          <div className="flex items-center justify-between p-4 border rounded-lg">
+            <div>
+              <h4 className="font-medium">Sync from Supabase</h4>
+              <p className="text-sm text-gray-600">Download latest data from Supabase to local storage</p>
+            </div>
+            <Button 
+              onClick={handleSyncFromSupabase}
+              disabled={isSyncing || isMigrating}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              {isSyncing ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCw className="h-4 w-4" />
+              )}
+              {isSyncing ? 'Syncing...' : 'Sync Data'}
+            </Button>
           </div>
         </CardContent>
       </Card>
